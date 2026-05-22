@@ -178,8 +178,8 @@ All endpoints are prefixed with `/v1`. Protected routes require `Authorization: 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/v1/dids` | Public | Generate `did:key` keypair + DID document; returns private key **once** |
+| `GET` | `/v1/dids/me` | Any role | Get caller's own DID document *(must be registered before `/:did` in the router)* |
 | `GET` | `/v1/dids/:did` | Public | Resolve a DID document |
-| `GET` | `/v1/dids/me` | Any role | Get caller's own DID document |
 | `DELETE` | `/v1/dids/:did` | Owner | Deactivate (soft-delete) a DID |
 
 ### Credentials — Issuer only (write), Owner (read)
@@ -228,9 +228,11 @@ Issuer → POST /v1/credentials/issue { subjectDid, credentialType, claims, expi
 Subject → POST /v1/presentations/derive { credentialId, revealedClaims: ['name','degree'] }
 
 1. Fetch full VC from DB (all claims + BBS+ signature)
-2. Decrypt subject private key in memory
-3. BBS+ deriveProof: input full VC + signature + disclosed indices → derived proof
-4. Wrap in W3C VP envelope with DataIntegrityProof
+2. BBS+ deriveProof: input full VC + issuer public key + original BBS+ signature
+   + indices of disclosed claims → derived proof (no subject private key needed here)
+3. Wrap derived proof in W3C VP envelope
+4. Decrypt subject private key in memory → sign VP envelope (holder-binding proof)
+   proving the subject is the legitimate holder
 5. Store VP → write audit log → return VP to subject
 ```
 
