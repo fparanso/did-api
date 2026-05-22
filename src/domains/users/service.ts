@@ -11,11 +11,15 @@ import {
   findResetToken,
   getUserProfile,
 } from './repository.js'
+import { createSession } from '../auth/repository.js'
 import { sql, writeAuditLog } from '../../shared/db.js'
 import { Errors } from '../../shared/errors.js'
 import type { Role, UserProfile } from '../../shared/types.js'
 
 const ARGON2_OPTIONS = { algorithm: 'argon2id' as const, memoryCost: 19456, timeCost: 2 }
+// Computed once at module load; used in loginUser to prevent timing attacks on unknown-email paths.
+// A literal PHC string would throw InvalidEncoding in Bun.password.verify, causing a 500 instead of 401.
+const DUMMY_HASH = await Bun.password.hash('dummy', ARGON2_OPTIONS)
 
 export async function createUser(
   email: string,
@@ -32,20 +36,23 @@ export async function createUser(
   // Create DID first so the FK constraint is satisfied
   const { did, role } = await createDid('subject')
 
-  const user = await insertUser({
-    email,
-    passwordHash,
-    name,
-    organizationName: organizationName ?? null,
-    did,
-  })
+  let user: Awaited<ReturnType<typeof insertUser>>
+  try {
+    user = await insertUser({
+      email,
+      passwordHash,
+      name,
+      organizationName: organizationName ?? null,
+      did,
+    })
+  } catch (err) {
+    // Best-effort DID cleanup to avoid orphan records if user insert fails
+    await sql`UPDATE dids SET deactivated_at = now() WHERE id = ${did}`.catch(() => {})
+    throw err
+  }
 
   const token = await issueJwt(did, 'subject')
-  await sql`
-    INSERT INTO sessions (did, role, token, expires_at)
-    VALUES (${did}, 'subject', ${token},
-            now() + interval '15 minutes')
-  `
+  await createSession(did, role, token)
   await writeAuditLog(did, 'auth', 'success')
 
   return {
@@ -69,8 +76,7 @@ export async function loginUser(
 ): Promise<{ token: string; user: UserProfile }> {
   const user = await findUserByEmail(email)
   // Always run password.verify even if user not found to prevent timing attacks
-  const dummyHash = '$argon2id$v=19$m=19456,t=2,p=1$dummy'
-  const hashToCheck = user?.passwordHash ?? dummyHash
+  const hashToCheck = user?.passwordHash ?? DUMMY_HASH
 
   const valid = await Bun.password.verify(password, hashToCheck)
 
@@ -83,11 +89,7 @@ export async function loginUser(
   const role = didRow.role as Role
 
   const token = await issueJwt(user.did, role)
-  await sql`
-    INSERT INTO sessions (did, role, token, expires_at)
-    VALUES (${user.did}, ${role}, ${token},
-            now() + interval '15 minutes')
-  `
+  await createSession(user.did, role, token)
   await writeAuditLog(user.did, 'auth', 'success')
 
   const profile = await getUserProfile(user.did)
@@ -146,5 +148,5 @@ export async function upgradeRole(userId: string, role: Role): Promise<void> {
   const user = await findUserById(userId)
   if (!user) throw Errors.USER_NOT_FOUND()
   await sql`UPDATE dids SET role = ${role} WHERE id = ${user.did}`
-  await writeAuditLog(user.did, 'auth', 'success')
+  await writeAuditLog(user.did, 'role_upgrade', 'success', userId)
 }
