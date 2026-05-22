@@ -111,7 +111,7 @@ Once a DID is created and the trust chain is established, credentials and presen
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TD
 
     [*] --> DID_Active : POST /v1/dids\n(any role)
 
