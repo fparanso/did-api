@@ -171,7 +171,7 @@ describe('GET /v1/users/me', () => {
 })
 
 describe('PATCH /v1/users/me', () => {
-  test('updates name and organizationName', async () => {
+  test('updates name', async () => {
     const loginRes = await post('/v1/auth/login', {
       email: 'alice@example.com',
       password: 'password123',
