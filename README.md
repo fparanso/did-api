@@ -26,6 +26,153 @@ This API enables four actor roles to participate in a full decentralized identit
 
 ---
 
+## Identity Lifecycle
+
+The full lifecycle spans four phases: **identity registration → trust setup → credential issuance → selective-disclosure verification**. Every actor starts with a DID and a private key, and the trust chain flows top-down from Attester to Issuer to Subject to Verifier.
+
+### End-to-End Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AT as 🔐 Attester
+    participant IS as 🏛️ Issuer
+    participant SU as 👤 Subject
+    participant VE as 🔍 Verifier
+    participant API as DID + ZKP API
+
+    rect rgb(220, 235, 255)
+        Note over AT,API: Phase 1 — Identity Registration (all public, no auth required)
+        AT->>API: POST /v1/dids  { role: "attester" }
+        API-->>AT: { did, document, privateKey }  ⚠️ save privateKey — returned once only
+
+        IS->>API: POST /v1/dids  { role: "issuer" }
+        API-->>IS: { did, document, privateKey }
+
+        SU->>API: POST /v1/dids  { role: "subject" }
+        API-->>SU: { did, document, privateKey }
+
+        VE->>API: POST /v1/dids  { role: "verifier" }
+        API-->>VE: { did, document, privateKey }
+    end
+
+    rect rgb(255, 243, 220)
+        Note over AT,API: Phase 2 — Trust Setup (Attester authorises the Issuer)
+        AT->>API: POST /v1/auth/challenge  { did: attesterDid }
+        API-->>AT: { challengeId, nonce }
+        Note over AT: sign( attesterDid + ":" + nonce ) with Ed25519 privateKey
+        AT->>API: POST /v1/auth/verify  { did, challengeId, signature }
+        API-->>AT: { token }  (JWT · 15 min TTL)
+
+        AT->>API: POST /v1/trust/attest  { issuerDid, expiresAt? }
+        API-->>AT: attestation VC  (adds Issuer to trust registry)
+    end
+
+    rect rgb(220, 255, 230)
+        Note over IS,SU: Phase 3 — Credential Issuance
+        IS->>API: POST /v1/auth/challenge → POST /v1/auth/verify
+        API-->>IS: { token }
+
+        SU->>API: POST /v1/auth/challenge → POST /v1/auth/verify
+        API-->>SU: { token }
+
+        IS->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType, claims: { name, degree, gpa, … } }
+        Note over API: ① verify Issuer has active trust attestation<br/>② sign all claims with BBS+ (DataIntegrityProof)<br/>③ persist VC with status = active
+        API-->>IS: signed Verifiable Credential
+
+        Note over IS,SU: Issuer shares credentialId with Subject out-of-band (e.g. QR code, secure message)
+        SU->>API: GET /v1/credentials/{id}
+        API-->>SU: full VC record
+    end
+
+    rect rgb(250, 225, 255)
+        Note over SU,VE: Phase 4 — Selective Disclosure & Verification
+        Note over SU: Subject chooses which claims to reveal<br/>e.g. ["name", "degree"] — GPA stays private
+        SU->>API: POST /v1/presentations/derive<br/>{ credentialId, revealedClaims: ["name", "degree"] }
+        Note over API: derive BBS+ proof over chosen subset only
+        API-->>SU: Verifiable Presentation  (VP with ZK proof)
+
+        Note over SU,VE: Subject sends VP to Verifier (off-API channel or direct)
+
+        VE->>API: POST /v1/auth/challenge → POST /v1/auth/verify
+        API-->>VE: { token }
+
+        VE->>API: POST /v1/presentations/verify  { presentation: <VP> }
+        Note over API: ① verify BBS+ cryptographic proof<br/>② check Issuer is in trust registry<br/>③ check credential revocation/expiry status
+        API-->>VE: { valid, disclosedClaims, issuerTrusted, credentialStatus }
+    end
+```
+
+---
+
+### Credential & Presentation State Machine
+
+Once a DID is created and the trust chain is established, credentials and presentations move through well-defined states. Revocation is permanent — a new credential must be issued to reinstate access.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> DID_Active : POST /v1/dids\n(any role)
+
+    state "DID Active" as DID_Active
+    state "VC Active" as VC_Active
+    state "VP Derived" as VP_Derived
+
+    DID_Active --> DID_Deactivated : DELETE /v1/dids/{did}\n(owner only · irreversible)
+    DID_Active --> VC_Active : POST /v1/credentials/issue\n(Issuer + active attestation)
+
+    VC_Active --> VP_Derived : POST /v1/presentations/derive\n(Subject · choose claims to reveal)
+    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke\n(Issuer only · irreversible)
+    VC_Active --> VC_Expired : expiresAt timestamp reached
+
+    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify\n✅ proof valid · issuer trusted · VC active
+    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify\n❌ invalid proof OR issuer untrusted OR VC revoked/expired
+
+    VC_Revoked --> [*]
+    VC_Expired --> [*]
+    DID_Deactivated --> [*]
+```
+
+---
+
+### Trust Model at a Glance
+
+```mermaid
+flowchart TD
+    AT(["🔐 Attester\ndid:key"])
+    IS(["🏛️ Issuer\ndid:key"])
+    SU(["👤 Subject\ndid:key"])
+    VE(["🔍 Verifier\ndid:key"])
+    TR[("Trust Registry\ntrust_attestations")]
+    VC["BBS+ Verifiable\nCredential"]
+    VP["Verifiable Presentation\n(selective disclosure)"]
+    RES{{"Verification\nResult"}}
+
+    AT -->|"POST /v1/trust/attest\ngrant attestation VC"| TR
+    TR -->|"authorises issuance"| IS
+    IS -->|"POST /v1/credentials/issue\nsign with BBS+"| VC
+    VC -->|"held by"| SU
+    SU -->|"POST /v1/presentations/derive\nreveal only chosen claims"| VP
+    VP -->|"shared with"| VE
+    VE -->|"POST /v1/presentations/verify"| RES
+    TR -.->|"trust check"| RES
+    VC -.->|"revocation check"| RES
+
+    style AT fill:#dce8ff,stroke:#4a90d9
+    style IS fill:#dce8ff,stroke:#4a90d9
+    style SU fill:#dce8ff,stroke:#4a90d9
+    style VE fill:#dce8ff,stroke:#4a90d9
+    style TR fill:#fff3dc,stroke:#e6a817
+    style VC fill:#dcffe8,stroke:#27ae60
+    style VP fill:#f5dcff,stroke:#8e44ad
+    style RES fill:#f0f0f0,stroke:#555
+```
+
+> **Privacy guarantee:** The Verifier only ever sees the claims the Subject explicitly included in `revealedClaims`. All other claims in the original credential are cryptographically hidden — the BBS+ proof is mathematically indistinguishable from a proof over the full credential.
+
+---
+
 ## Architecture
 
 ```
