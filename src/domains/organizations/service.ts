@@ -158,11 +158,11 @@ export async function updateMemberRole(
   const caller = await findUserByDid(callerDid)
   if (!caller) throw Errors.USER_NOT_FOUND()
 
-  const callerMembership = await findMember(orgId, caller.id)
-  if (!callerMembership) throw Errors.INSUFFICIENT_ORG_ROLE()
+  // Members cannot change anyone's role — only admins and owners
+  const callerMembership = await requireOrgRole(orgId, caller.id, 'admin')
 
   // owners can change anyone except themselves; admins can only promote members to admin
-  if (callerMembership.role === 'admin' && newRole === 'owner') throw Errors.INSUFFICIENT_ORG_ROLE()
+  if (callerMembership === 'admin' && newRole === 'owner') throw Errors.INSUFFICIENT_ORG_ROLE()
   if (caller.id === targetUserId) throw Errors.INSUFFICIENT_ORG_ROLE()
 
   // Prevent demoting the last owner
