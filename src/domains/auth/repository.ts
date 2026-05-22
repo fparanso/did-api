@@ -28,7 +28,8 @@ export async function consumeChallenge(
 }
 
 export async function createSession(did: string, role: string, token: string): Promise<void> {
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 min
+  const durationMs = (process.env.NODE_ENV === 'development' ? 120 : 15) * 60 * 1000
+  const expiresAt = new Date(Date.now() + durationMs)
   await sql`
     INSERT INTO sessions (did, role, token, expires_at)
     VALUES (${did}, ${role}, ${token}, ${expiresAt})

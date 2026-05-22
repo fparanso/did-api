@@ -50,9 +50,10 @@ export async function verifyChallenge(
 
 export async function issueJwt(did: string, role: Role): Promise<string> {
   const secret = new TextEncoder().encode(process.env.JWT_SECRET!)
+  const expiration = process.env.NODE_ENV === 'development' ? '120m' : '15m'
   return new SignJWT({ did, role })
     .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('15m')
+    .setExpirationTime(expiration)
     .setIssuedAt()
     .sign(secret)
 }
