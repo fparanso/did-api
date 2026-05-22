@@ -77,15 +77,21 @@ export async function insertResetToken(
   `
 }
 
+// Atomically marks the token used and returns the owner's userId + did.
+// Returns null if the token doesn't exist, is already used, or has expired.
 export async function consumeResetToken(token: string): Promise<{
   userId: string
   userDid: string
 } | null> {
   const [row] = await sql`
-    SELECT prt.id, prt.user_id, prt.used, prt.expires_at, u.did
-    FROM password_reset_tokens prt
-    JOIN users u ON u.id = prt.user_id
-    WHERE prt.token = ${token}
+    UPDATE password_reset_tokens prt
+    SET used = true
+    FROM users u
+    WHERE prt.user_id = u.id
+      AND prt.token = ${token}
+      AND prt.used = false
+      AND prt.expires_at > now()
+    RETURNING prt.user_id, u.did
   `
   if (!row) return null
   return { userId: row.userId, userDid: row.did }
