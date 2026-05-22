@@ -34,3 +34,5 @@ CREATE INDEX IF NOT EXISTS org_members_user_idx  ON org_members (user_id);
 CREATE INDEX IF NOT EXISTS org_invites_email_idx ON org_invites (email);
 CREATE INDEX IF NOT EXISTS org_invites_did_idx   ON org_invites (did);
 CREATE INDEX IF NOT EXISTS org_invites_token_idx ON org_invites (token);
+CREATE INDEX IF NOT EXISTS orgs_owner_idx     ON organizations (owner_id);
+CREATE INDEX IF NOT EXISTS org_invites_org_idx ON org_invites   (org_id);
