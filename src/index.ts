@@ -45,7 +45,12 @@ app.route('/v1/dids', didRouter)
 app.route('/v1/credentials', credentialsRouter)
 app.route('/v1/presentations', presentationRouter)
 app.route('/v1/trust', trustRouter)
-// Email auth routes (signup, forgot-password, reset-password) + User profile (me) + Admin role upgrade
+// usersRouter is mounted at three prefixes:
+//   /v1/auth       — POST /signup, /forgot-password, /reset-password (no path overlap with authRouter)
+//   /v1/users      — GET/PATCH /me
+//   /v1/admin/users — POST /:id/role
+// NOTE: Both authRouter and usersRouter share the /v1/auth prefix. Hono matches in order;
+// ensure future routes added to usersRouter don't collide with authRouter paths (/challenge, /verify, /login).
 app.route('/v1/auth', usersRouter)
 app.route('/v1/users', usersRouter)
 app.route('/v1/admin/users', usersRouter)
