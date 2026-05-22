@@ -59,6 +59,11 @@ beforeAll(async () => {
   await sql`DELETE FROM auth_challenges`
   await sql`DELETE FROM sessions`
   await sql`TRUNCATE audit_log`
+  await sql`DELETE FROM org_members`
+  await sql`DELETE FROM org_invites`
+  await sql`DELETE FROM organizations`
+  await sql`DELETE FROM password_reset_tokens`
+  await sql`DELETE FROM users`
   await sql`DELETE FROM dids`
 })
 

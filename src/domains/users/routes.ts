@@ -94,7 +94,7 @@ usersRouter.patch('/me', jwtMiddleware, async c => {
 })
 
 // POST /v1/admin/users/:id/role
-usersRouter.post('/admin/:id/role', async c => {
+usersRouter.post('/:id/role', async c => {
   const secret = c.req.header('x-admin-secret') ?? ''
   const expected = process.env.ADMIN_SECRET ?? ''
   const secretBuf = Buffer.from(secret)
