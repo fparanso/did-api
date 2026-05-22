@@ -1,5 +1,6 @@
 // src/index.ts
 import { Hono } from 'hono'
+import { apiReference } from '@scalar/hono-api-reference'
 import { AppError } from './shared/errors.js'
 import { runMigrations, sql } from './shared/db.js'
 import { initContextLoader, setDidResolver } from './shared/jsonld/loader.js'
@@ -12,6 +13,7 @@ import { credentialsRouter } from './domains/credentials/routes.js'
 import { presentationRouter } from './domains/presentation/routes.js'
 import { trustRouter } from './domains/trust/routes.js'
 import { findDid } from './domains/did/repository.js'
+import { openApiSpec } from './shared/openapi.js'
 import type { HonoVariables } from './shared/types.js'
 
 const app = new Hono<{ Variables: HonoVariables }>()
@@ -42,6 +44,18 @@ app.route('/v1/dids', didRouter)
 app.route('/v1/credentials', credentialsRouter)
 app.route('/v1/presentations', presentationRouter)
 app.route('/v1/trust', trustRouter)
+
+// OpenAPI Spec & Scalar Reference UI
+app.get('/openapi.json', c => c.json(openApiSpec))
+app.get(
+  '/reference',
+  apiReference({
+    theme: 'purple',
+    spec: {
+      url: '/openapi.json',
+    },
+  })
+)
 
 // Global error handler
 app.onError((err, c) => {
