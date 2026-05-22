@@ -112,22 +112,20 @@ Once a DID is created and the trust chain is established, credentials and presen
 ```mermaid
 stateDiagram-v2
     direction TD
-
-    [*] --> DID_Active : POST /v1/dids\n(any role)
-
+    [*] --> DID_Active : POST /v1/dids<br>(any role)
     state "DID Active" as DID_Active
     state "VC Active" as VC_Active
     state "VP Derived" as VP_Derived
 
-    DID_Active --> DID_Deactivated : DELETE /v1/dids/{did}\n(owner only · irreversible)
-    DID_Active --> VC_Active : POST /v1/credentials/issue\n(Issuer + active attestation)
+    DID_Active --> DID_Deactivated : DELETE /v1/dids/{did}<br>(owner only · irreversible)
+    DID_Active --> VC_Active : POST /v1/credentials/issue<br>(Issuer + active attestation)
 
-    VC_Active --> VP_Derived : POST /v1/presentations/derive\n(Subject · choose claims to reveal)
-    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke\n(Issuer only · irreversible)
+    VC_Active --> VP_Derived : POST /v1/presentations/derive<br>(Subject · choose claims to reveal)
+    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke<br>(Issuer only · irreversible)
     VC_Active --> VC_Expired : expiresAt timestamp reached
 
-    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify\n✅ proof valid · issuer trusted · VC active
-    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify\n❌ invalid proof OR issuer untrusted OR VC revoked/expired
+    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify<br>✅ proof valid · issuer trusted · VC active
+    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify<br>❌ invalid proof OR issuer untrusted OR VC revoked/expired
 
     VC_Revoked --> [*]
     VC_Expired --> [*]
@@ -140,20 +138,20 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    AT(["🔐 Attester\ndid:key"])
-    IS(["🏛️ Issuer\ndid:key"])
-    SU(["👤 Subject\ndid:key"])
-    VE(["🔍 Verifier\ndid:key"])
-    TR[("Trust Registry\ntrust_attestations")]
-    VC["BBS+ Verifiable\nCredential"]
-    VP["Verifiable Presentation\n(selective disclosure)"]
-    RES{{"Verification\nResult"}}
+    AT(["🔐 Attester<br>did:key"])
+    IS(["🏛️ Issuer<br>did:key"])
+    SU(["👤 Subject<br>did:key"])
+    VE(["🔍 Verifier<br>did:key"])
+    TR[("Trust Registry<br>trust_attestations")]
+    VC["BBS+ Verifiable<br>Credential"]
+    VP["Verifiable Presentation<br>(selective disclosure)"]
+    RES{{"Verification<br>Result"}}
 
-    AT -->|"POST /v1/trust/attest\ngrant attestation VC"| TR
+    AT -->|"POST /v1/trust/attest<br>grant attestation VC"| TR
     TR -->|"authorises issuance"| IS
-    IS -->|"POST /v1/credentials/issue\nsign with BBS+"| VC
+    IS -->|"POST /v1/credentials/issue<br>sign with BBS+"| VC
     VC -->|"held by"| SU
-    SU -->|"POST /v1/presentations/derive\nreveal only chosen claims"| VP
+    SU -->|"POST /v1/presentations/derive<br>reveal only chosen claims"| VP
     VP -->|"shared with"| VE
     VE -->|"POST /v1/presentations/verify"| RES
     TR -.->|"trust check"| RES
