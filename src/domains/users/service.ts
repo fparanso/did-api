@@ -7,11 +7,8 @@ import {
   findUserById,
   findUserByDid,
   updateUserProfile,
-  updatePasswordHash,
   insertResetToken,
   findResetToken,
-  markResetTokenUsed,
-  invalidateUserSessions,
   getUserProfile,
 } from './repository.js'
 import { sql, writeAuditLog } from '../../shared/db.js'
