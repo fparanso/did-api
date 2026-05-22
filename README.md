@@ -251,6 +251,22 @@ bun test
 
 ---
 
+## CLI Utilities
+
+### Signature Generator
+For local development and testing, you can use the built-in CLI signature generator to create signatures for the DID challenge-response authentication. It retrieves the required nonce and private key from your local database, signs the challenge, and outputs the base64-encoded signature:
+
+```bash
+bun run generate-signature.ts <did> <challengeId>
+```
+
+Example:
+```bash
+bun run generate-signature.ts "did:key:z6MknwjrNSCBRBYdCgSXPHFQXNyisvEWM3SuVYnT6d215XUC" "af003fcc-5012-42f9-b508-4f7e4d88236a"
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Required | Description |
