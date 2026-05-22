@@ -6,7 +6,7 @@ export async function securityHeadersMiddleware(c: Context, next: Next) {
   c.res.headers.set('X-Frame-Options', 'DENY')
   c.res.headers.set('X-XSS-Protection', '1; mode=block')
   c.res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-  if (c.req.path === '/reference' || c.req.path.startsWith('/reference/')) {
+  if (c.req.path === '/docs' || c.req.path.startsWith('/docs/')) {
     c.res.headers.set(
       'Content-Security-Policy',
       "default-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data: https://cdn.jsdelivr.net; connect-src 'self' *"

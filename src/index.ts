@@ -48,7 +48,7 @@ app.route('/v1/trust', trustRouter)
 // OpenAPI Spec & Scalar Reference UI
 app.get('/openapi.json', c => c.json(openApiSpec))
 app.get(
-  '/reference',
+  '/docs',
   apiReference({
     theme: 'purple',
     spec: {
