@@ -73,7 +73,7 @@ export interface UserProfile {
     id: string
     name: string
     slug: string
-    memberRole: 'owner' | 'admin' | 'member'
+    memberRole: OrgMemberRole
   }>
 }
 
@@ -87,6 +87,7 @@ export interface PasswordResetTokenRecord {
 }
 
 export type OrgMemberRole = 'owner' | 'admin' | 'member'
+export type OrgInviteRole = Exclude<OrgMemberRole, 'owner'>
 
 export interface OrgRecord {
   id: string
@@ -110,7 +111,7 @@ export interface OrgInviteRecord {
   invitedBy: string
   email: string | null
   did: string | null
-  role: 'admin' | 'member'
+  role: OrgInviteRole
   token: string
   accepted: boolean
   expiresAt: Date
