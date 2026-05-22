@@ -6,7 +6,7 @@ export async function insertDid(record: Omit<DidRecord, 'createdAt' | 'deactivat
   await sql`
     INSERT INTO dids (id, role, document, public_key, private_key, bls_public_key, bls_private_key)
     VALUES (
-      ${record.id}, ${record.role}, ${JSON.stringify(record.document)},
+      ${record.id}, ${record.role}, ${sql.json(record.document as any)},
       ${record.publicKey}, ${record.privateKey},
       ${record.blsPublicKey ?? null}, ${record.blsPrivateKey ?? null}
     )

@@ -3,8 +3,14 @@ import { Errors } from '../errors.js'
 
 const store = new Map<string, { count: number; resetAt: number }>()
 
+let _disabled = false
+export function setRateLimitDisabled(disabled: boolean): void {
+  _disabled = disabled
+}
+
 export function createRateLimiter(maxRequests: number, windowMs: number) {
   return async (c: Context, next: Next) => {
+    if (_disabled) return next()
     const ip = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? 'unknown'
     const now = Date.now()
     const entry = store.get(ip)

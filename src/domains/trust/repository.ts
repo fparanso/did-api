@@ -9,7 +9,7 @@ export async function insertAttestation(
     INSERT INTO trust_attestations (id, attester_did, issuer_did, credential, status, expires_at)
     VALUES (
       ${record.id}, ${record.attesterDid}, ${record.issuerDid},
-      ${JSON.stringify(record.credential)}, ${record.status}, ${record.expiresAt ?? null}
+      ${sql.json(record.credential as any)}, ${record.status}, ${record.expiresAt ?? null}
     )
   `
 }

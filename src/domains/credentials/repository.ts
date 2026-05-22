@@ -9,8 +9,8 @@ export async function insertCredential(
     INSERT INTO credentials (id, issuer_did, subject_did, type, claims, document, status, expires_at)
     VALUES (
       ${record.id}, ${record.issuerDid}, ${record.subjectDid},
-      ${record.type}, ${JSON.stringify(record.claims)},
-      ${JSON.stringify(record.document)}, ${record.status}, ${record.expiresAt ?? null}
+      ${record.type}, ${sql.json(record.claims as any)},
+      ${sql.json(record.document as any)}, ${record.status}, ${record.expiresAt ?? null}
     )
   `
 }

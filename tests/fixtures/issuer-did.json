@@ -1,0 +1,43 @@
+{
+  "did": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+  "role": "issuer",
+  "document": {
+    "@context": [
+      "https://www.w3.org/ns/did/v1",
+      "https://w3id.org/security/suites/ed25519-2020/v1",
+      "https://w3id.org/security/multikey/v1"
+    ],
+    "id": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+    "verificationMethod": [
+      {
+        "id": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+        "type": "Ed25519VerificationKey2020",
+        "controller": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+        "publicKeyMultibase": "z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb"
+      },
+      {
+        "id": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#zUC7C7X8MRhuMx1j8RfrwKfmWdbK2e2q5xsNczdELmmTgzASsKUf2ebPFH1oC8eCxdTvDSrMEDv84pc2yS1g24Hepf3d9vGEFR4yNzqnR1UsSTUjNrwTjfEPyYJw6KBC8bSRLvj",
+        "type": "Multikey",
+        "controller": "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+        "publicKeyMultibase": "zUC7C7X8MRhuMx1j8RfrwKfmWdbK2e2q5xsNczdELmmTgzASsKUf2ebPFH1oC8eCxdTvDSrMEDv84pc2yS1g24Hepf3d9vGEFR4yNzqnR1UsSTUjNrwTjfEPyYJw6KBC8bSRLvj"
+      }
+    ],
+    "authentication": [
+      "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb"
+    ],
+    "assertionMethod": [
+      "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+      "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#zUC7C7X8MRhuMx1j8RfrwKfmWdbK2e2q5xsNczdELmmTgzASsKUf2ebPFH1oC8eCxdTvDSrMEDv84pc2yS1g24Hepf3d9vGEFR4yNzqnR1UsSTUjNrwTjfEPyYJw6KBC8bSRLvj"
+    ],
+    "capabilityInvocation": [
+      "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb"
+    ],
+    "capabilityDelegation": [
+      "did:key:z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb#z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb"
+    ]
+  },
+  "publicKeyMultibase": "z6MkiXM8DEyrwqycAaABM9ChsXMptVdmH1vfpSVVrtXypuGb",
+  "privateKeyMultibase": "zrv4oir9LMdZqCo5suidG1WhsPACSweDqLFp7mt6YxU8Ljms1TCjRojtBUYBQYK6HPtRzrqod3xUz36hdjSLaJmNMLj",
+  "blsPublicKey": "zUC7C7X8MRhuMx1j8RfrwKfmWdbK2e2q5xsNczdELmmTgzASsKUf2ebPFH1oC8eCxdTvDSrMEDv84pc2yS1g24Hepf3d9vGEFR4yNzqnR1UsSTUjNrwTjfEPyYJw6KBC8bSRLvj",
+  "blsSecretKey": "z488y29ff4xaUWJ1CTB7MG1uphJaqfTDGzRy5MBvs1RdhnCe"
+}

@@ -9,7 +9,7 @@ export async function insertPresentation(
     INSERT INTO presentations (id, holder_did, credential_ids, document, disclosed_claims)
     VALUES (
       ${record.id}, ${record.holderDid}, ${record.credentialIds},
-      ${JSON.stringify(record.document)}, ${JSON.stringify(record.disclosedClaims)}
+      ${sql.json(record.document as any)}, ${sql.json(record.disclosedClaims as any)}
     )
   `
 }

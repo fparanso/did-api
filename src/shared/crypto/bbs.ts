@@ -8,6 +8,7 @@ import { DataIntegrityProof } from '@digitalbazaar/data-integrity'
 import { from as blsFrom } from '@digitalbazaar/bls12-381-multikey'
 import * as vc from '@digitalbazaar/vc'
 import * as jldSig from 'jsonld-signatures'
+import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { getDocumentLoader } from '../jsonld/loader.js'
 
 export interface BlsKeyPairInput {
@@ -28,7 +29,9 @@ export async function signCredential(
   })
   const suite = new DataIntegrityProof({
     signer: keyPair.signer(),
-    cryptosuite: createSignCryptosuite(),
+    cryptosuite: createSignCryptosuite({
+      mandatoryPointers: ['/issuer', '/credentialSubject/id'],
+    }),
   })
   return vc.issue({ credential, suite, documentLoader: getDocumentLoader() })
 }
@@ -46,17 +49,53 @@ export async function deriveProof(
 export async function verifyProof(
   credentialOrPresentation: object
 ): Promise<boolean> {
+  const doc = credentialOrPresentation as Record<string, unknown>
+  const documentLoader = getDocumentLoader()
+
+  // Determine if this is a VP (has verifiableCredential field) or a VC
+  const isPresentation =
+    Array.isArray((doc as any).type)
+      ? (doc as any).type.includes('VerifiablePresentation')
+      : (doc as any).type === 'VerifiablePresentation'
+
+  if (isPresentation) {
+    // Verify embedded VC's BBS+ derived proof
+    const embeddedVc = Array.isArray((doc as any).verifiableCredential)
+      ? (doc as any).verifiableCredential[0]
+      : (doc as any).verifiableCredential
+
+    if (embeddedVc) {
+      const bbsSuite = new DataIntegrityProof({
+        cryptosuite: createVerifyCryptosuite(),
+      })
+      const vcResult = await jldSig.verify(embeddedVc, {
+        suite: bbsSuite,
+        purpose: new (jldSig as any).purposes.AssertionProofPurpose(),
+        documentLoader,
+      })
+      if (!vcResult.verified) return false
+    }
+
+    // Verify outer VP holder Ed25519 proof
+    const challenge = ((doc as any).proof as Record<string, unknown>)?.challenge as string | undefined
+    const vpResult = await jldSig.verify(doc, {
+      suite: new Ed25519Signature2020(),
+      purpose: new (jldSig as any).purposes.AuthenticationProofPurpose({
+        challenge: challenge ?? '',
+      }),
+      documentLoader,
+    })
+    return vpResult.verified
+  }
+
+  // Single VC verification using BBS+ verify cryptosuite
   const suite = new DataIntegrityProof({
     cryptosuite: createVerifyCryptosuite(),
   })
-
-  // BBS+ derived VCs may omit `issuer` (selective disclosure), so we verify
-  // the DataIntegrity proof directly via jsonld-signatures rather than using
-  // vc.verify / vc.verifyCredential which require the `issuer` field.
   const result = await jldSig.verify(credentialOrPresentation, {
     suite,
     purpose: new (jldSig as any).purposes.AssertionProofPurpose(),
-    documentLoader: getDocumentLoader(),
+    documentLoader,
   })
   return result.verified
 }
