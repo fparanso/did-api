@@ -185,14 +185,12 @@ export async function removeMember(
   const caller = await findUserByDid(callerDid)
   if (!caller) throw Errors.USER_NOT_FOUND()
 
-  // Allow self-removal (leave org)
+  // Allow self-removal (leave org); otherwise caller must be admin+
   if (caller.id !== targetUserId) {
-    const callerMembership = await findMember(orgId, caller.id)
-    if (!callerMembership) throw Errors.INSUFFICIENT_ORG_ROLE()
-    if (callerMembership.role === 'member') throw Errors.INSUFFICIENT_ORG_ROLE()
+    const callerRole = await requireOrgRole(orgId, caller.id, 'admin')
 
     const targetMembership = await findMember(orgId, targetUserId)
-    if (targetMembership?.role === 'owner' && callerMembership.role !== 'owner') {
+    if (targetMembership?.role === 'owner' && callerRole !== 'owner') {
       throw Errors.INSUFFICIENT_ORG_ROLE()
     }
   }
