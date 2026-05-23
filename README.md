@@ -1,6 +1,8 @@
 # DID + ZKP REST API
 
-A production-ready REST API built with **Bun** and **Hono** that implements the [W3C Decentralized Identity (DID)](https://www.w3.org/TR/did-core/) protocol with **Zero-Knowledge Proofs** via **BBS+ signatures** for selective disclosure of Verifiable Credentials.
+A REST API for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
+
+Developers can use this API to add trusted credential management to any platform: a university issuing digital diplomas, a company managing employee certifications, or an app that lets users prove facts about themselves without oversharing. Built with **Bun** and **Hono**, production-ready and OWASP-compliant out of the box.
 
 ---
 
