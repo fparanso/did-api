@@ -4,6 +4,7 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://localhost/did_zkp_test'
 process.env.KEY_ENCRYPTION_SECRET = 'a'.repeat(64)
 process.env.JWT_SECRET = 'test-secret'
+process.env.ADMIN_SECRET = 'test-admin-secret'
 process.env.NODE_ENV = 'test'
 process.env.CORS_ORIGIN = 'http://localhost:3000'
 
@@ -222,6 +223,7 @@ describe('API2 — Reset token security', () => {
     // Directly insert an expired token via DB
     const { sql: testSql } = await import('../../src/shared/db')
     const [user] = await testSql`SELECT id FROM users WHERE email = 'owasp-user@example.com' LIMIT 1`
+    expect(user).toBeDefined()
     if (user) {
       const expiredToken = 'expiredtoken'.padEnd(64, '0')
       await testSql`

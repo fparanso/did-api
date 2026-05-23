@@ -155,6 +155,12 @@ describe('Organization lifecycle', () => {
       ownerToken
     )
     expect(res.status).toBe(200)
+
+    // Verify role actually changed in DB
+    const membersRes = await get(`/v1/organizations/${orgId}/members`, ownerToken)
+    const { members } = await membersRes.json()
+    const promoted = members.find((m: any) => m.userId === memberUserId)
+    expect(promoted?.role).toBe('admin')
   })
 
   test('member cannot call admin-only invite endpoint', async () => {
@@ -221,7 +227,7 @@ describe('Organization lifecycle', () => {
     expect(body.error).toBe('CANNOT_REMOVE_LAST_OWNER')
   })
 
-  test('owner deletes org — org DID is deactivated', async () => {
+  test('owner deletes org — org and all members removed', async () => {
     const res = await del(`/v1/organizations/${orgId}`, ownerToken)
     expect(res.status).toBe(200)
 
