@@ -12,6 +12,8 @@ import { didRouter } from './domains/did/routes.js'
 import { credentialsRouter } from './domains/credentials/routes.js'
 import { presentationRouter } from './domains/presentation/routes.js'
 import { trustRouter } from './domains/trust/routes.js'
+import { usersRouter } from './domains/users/routes.js'
+import { orgsRouter } from './domains/organizations/routes.js'
 import { findDid } from './domains/did/repository.js'
 import { openApiSpec } from './shared/openapi.js'
 import type { HonoVariables } from './shared/types.js'
@@ -44,6 +46,16 @@ app.route('/v1/dids', didRouter)
 app.route('/v1/credentials', credentialsRouter)
 app.route('/v1/presentations', presentationRouter)
 app.route('/v1/trust', trustRouter)
+// usersRouter is mounted at three prefixes:
+//   /v1/auth       — POST /signup, /forgot-password, /reset-password (no path overlap with authRouter)
+//   /v1/users      — GET/PATCH /me
+//   /v1/admin/users — POST /:id/role
+// NOTE: Both authRouter and usersRouter share the /v1/auth prefix. Hono matches in order;
+// ensure future routes added to usersRouter don't collide with authRouter paths (/challenge, /verify, /login).
+app.route('/v1/auth', usersRouter)
+app.route('/v1/users', usersRouter)
+app.route('/v1/admin/users', usersRouter)
+app.route('/v1/organizations', orgsRouter)
 
 // OpenAPI Spec & Scalar Reference UI
 app.get('/openapi.json', c => c.json(openApiSpec))

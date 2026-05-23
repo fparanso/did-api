@@ -25,7 +25,12 @@ beforeAll(async () => {
 
   await runMigrations()
 
-  // Clean test data
+  // Clean test data — order matters: children before parents
+  await sql`DELETE FROM org_members`
+  await sql`DELETE FROM org_invites`
+  await sql`DELETE FROM organizations`
+  await sql`DELETE FROM password_reset_tokens`
+  await sql`DELETE FROM users`
   await sql`DELETE FROM presentations`
   await sql`DELETE FROM credentials`
   await sql`DELETE FROM trust_attestations`

@@ -50,3 +50,70 @@ export interface HonoVariables {
   did: string
   role: Role
 }
+
+export interface UserRecord {
+  id: string
+  email: string
+  passwordHash: string
+  name: string
+  organizationName: string | null
+  did: string
+  createdAt: Date
+}
+
+export interface UserProfile {
+  id: string
+  email: string
+  name: string
+  organizationName: string | null
+  did: string
+  role: Role
+  createdAt: Date
+  organizations: Array<{
+    id: string
+    name: string
+    slug: string
+    memberRole: OrgMemberRole
+  }>
+}
+
+export interface PasswordResetTokenRecord {
+  id: string
+  userId: string
+  token: string
+  expiresAt: Date
+  used: boolean
+  createdAt: Date
+}
+
+export type OrgMemberRole = 'owner' | 'admin' | 'member'
+export type OrgInviteRole = Exclude<OrgMemberRole, 'owner'>
+
+export interface OrgRecord {
+  id: string
+  name: string
+  slug: string
+  did: string
+  ownerId: string
+  createdAt: Date
+}
+
+export interface OrgMemberRecord {
+  orgId: string
+  userId: string
+  role: OrgMemberRole
+  joinedAt: Date
+}
+
+export interface OrgInviteRecord {
+  id: string
+  orgId: string
+  invitedBy: string
+  email: string | null
+  did: string | null
+  role: OrgInviteRole
+  token: string
+  accepted: boolean
+  expiresAt: Date
+  createdAt: Date
+}

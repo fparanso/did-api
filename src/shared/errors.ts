@@ -37,4 +37,32 @@ export const Errors = {
     new AppError('RATE_LIMITED', 'Too many requests', 429),
   FORBIDDEN: () =>
     new AppError('FORBIDDEN', 'Access denied', 403),
+  EMAIL_TAKEN: () =>
+    new AppError('EMAIL_TAKEN', 'An account with this email already exists', 409),
+  INVALID_CREDENTIALS: () =>
+    new AppError('INVALID_CREDENTIALS', 'Invalid email or password', 401),
+  USER_NOT_FOUND: () =>
+    new AppError('USER_NOT_FOUND', 'User not found', 404),
+  RESET_TOKEN_INVALID: () =>
+    new AppError('RESET_TOKEN_INVALID', 'Reset token not found', 404),
+  RESET_TOKEN_USED: () =>
+    new AppError('RESET_TOKEN_USED', 'Reset token has already been used', 410),
+  RESET_TOKEN_EXPIRED: () =>
+    new AppError('RESET_TOKEN_EXPIRED', 'Reset token has expired', 410),
+  SLUG_TAKEN: () =>
+    new AppError('SLUG_TAKEN', 'Organization slug is already taken', 409),
+  ALREADY_MEMBER: () =>
+    new AppError('ALREADY_MEMBER', 'User is already a member of this organization', 409),
+  INVITE_NOT_FOUND: () =>
+    new AppError('INVITE_NOT_FOUND', 'Invite not found', 404),
+  INVITE_EXPIRED: () =>
+    new AppError('INVITE_EXPIRED', 'Invite has expired', 410),
+  INVITE_ALREADY_USED: () =>
+    new AppError('INVITE_ALREADY_USED', 'Invite has already been accepted', 409),
+  CANNOT_REMOVE_LAST_OWNER: () =>
+    new AppError('CANNOT_REMOVE_LAST_OWNER', 'Cannot remove or demote the last owner', 409),
+  INSUFFICIENT_ORG_ROLE: () =>
+    new AppError('INSUFFICIENT_ORG_ROLE', 'Insufficient organization role for this action', 403),
+  ORG_NOT_FOUND: (id: string) =>
+    new AppError('ORG_NOT_FOUND', `Organization ${id} not found`, 404),
 }

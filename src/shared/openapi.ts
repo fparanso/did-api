@@ -4,7 +4,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'DID + ZKP REST API',
-    version: '1.0.0',
+    version: '1.2.0',
     description: `A production-ready REST API built with **Bun + Hono** that implements the W3C Decentralized Identity (DID) protocol with **Zero-Knowledge Proofs via BBS+ signatures** for privacy-preserving selective disclosure of Verifiable Credentials.
 
 ---
@@ -12,7 +12,7 @@ export const openApiSpec = {
 ## Core Concepts
 
 ### Actors and roles
-Every participant creates a \`did:key\` identity (\`POST /v1/dids\`) and is assigned one of four roles:
+Every participant is assigned one of four roles:
 
 | Role | Responsibility |
 |------|----------------|
@@ -21,28 +21,37 @@ Every participant creates a \`did:key\` identity (\`POST /v1/dids\`) and is assi
 | **subject** | Holds credentials; derives privacy-preserving presentations with selective disclosure |
 | **verifier** | Validates presentations against proof, trust chain, and revocation status |
 
-### Typical end-to-end flow
+### Authentication — two paths
+
+**Path A — Email/password (v1.2, recommended for user-facing apps):**
+1. \`POST /v1/auth/signup\` — create account; a \`did:key\` is generated automatically and returned
+2. \`POST /v1/auth/login\` — exchange email + password for a **JWT Bearer token**
+3. Use the token as \`Authorization: Bearer <token>\` on protected endpoints
+
+**Path B — DID challenge–response (cryptographic, for autonomous agents/services):**
+1. \`POST /v1/dids\` — create a raw DID keypair without a user account
+2. \`POST /v1/auth/challenge\` — receive a one-time nonce
+3. Sign \`"{did}:{nonce}"\` with your Ed25519 private key
+4. \`POST /v1/auth/verify\` — exchange the signature for a **JWT Bearer token**
+
+Both paths issue the same JWT format and grant the same access to protected endpoints.
+
+### Typical end-to-end flow (email auth)
 
 \`\`\`
-1. [attester]  POST /v1/dids                    → Create attester identity
-2. [issuer]    POST /v1/dids                    → Create issuer identity
-3. [subject]   POST /v1/dids                    → Create subject identity
-4. [attester]  POST /v1/auth/challenge+verify   → Authenticate
-5. [attester]  POST /v1/trust/attest            → Grant issuer trust attestation
-6. [issuer]    POST /v1/auth/challenge+verify   → Authenticate
-7. [issuer]    POST /v1/credentials/issue       → Issue BBS+ credential to subject
-8. [subject]   POST /v1/auth/challenge+verify   → Authenticate
-9. [subject]   POST /v1/presentations/derive    → Derive selective-disclosure VP (reveals subset of claims)
-10. [verifier] POST /v1/presentations/verify    → Verify proof + trust chain + revocation
+1. [attester]  POST /v1/auth/signup             → Create account (role defaults to subject; upgrade via admin)
+2. [admin]     POST /v1/admin/users/{id}/role   → Upgrade attester/issuer roles
+3. [attester]  POST /v1/auth/login              → Get JWT
+4. [attester]  POST /v1/trust/attest            → Grant issuer trust attestation
+5. [issuer]    POST /v1/auth/login              → Get JWT
+6. [issuer]    POST /v1/credentials/issue       → Issue BBS+ credential to subject
+7. [subject]   POST /v1/auth/login              → Get JWT
+8. [subject]   POST /v1/presentations/derive    → Derive selective-disclosure VP
+9. [verifier]  POST /v1/presentations/verify    → Verify proof + trust chain + revocation
 \`\`\`
 
-### Authentication
-All protected endpoints use **DID-based challenge–response authentication**:
-1. \`POST /v1/auth/challenge\` — receive a one-time nonce
-2. Sign \`"{did}:{nonce}"\` with your Ed25519 private key
-3. \`POST /v1/auth/verify\` — exchange the signature for a 15-minute **JWT Bearer token**
-
-Include the token as: \`Authorization: Bearer <token>\`
+### Organizations
+Users can create and manage **organizations** (e.g., universities, companies) that hold their own \`did:key\`. Organization members share the org DID for issuing credentials at an institutional level.
 
 ### Privacy model (BBS+ / ZKP)
 BBS+ signatures allow a credential holder to create a cryptographic proof that reveals only a chosen subset of claims. The verifier learns only what the subject explicitly discloses — no other claims are visible, and the proof is mathematically indistinguishable from a proof over the full credential.
@@ -52,7 +61,7 @@ BBS+ signatures allow a credential holder to create a cryptographic proof that r
 ## Global limits
 - **Rate limit:** 100 requests / minute per IP (global); 10 requests / minute for \`POST /v1/credentials/issue\`
 - **Body size:** 64 KB maximum
-- **JWT lifetime:** 15 minutes`,
+- **JWT lifetime:** 15 minutes (email/password login: 2 hours in non-production environments)`,
   },
   servers: [
     {
@@ -89,9 +98,792 @@ BBS+ signatures allow a credential holder to create a cryptographic proof that r
           },
         },
       },
+      UserProfile: {
+        type: 'object',
+        required: ['id', 'email', 'name', 'did', 'role', 'createdAt'],
+        properties: {
+          id: { type: 'string', format: 'uuid', example: '3fa85f64-5717-4562-b3fc-2c963f66afa6' },
+          email: { type: 'string', format: 'email', example: 'alice@example.com' },
+          name: { type: 'string', example: 'Alice Smith' },
+          organizationName: { type: 'string', nullable: true, example: 'Acme University' },
+          did: { type: 'string', example: 'did:key:z6Mku...' },
+          role: { type: 'string', enum: ['subject', 'issuer', 'verifier', 'attester'], example: 'subject' },
+          createdAt: { type: 'string', format: 'date-time' },
+          organizations: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['id', 'name', 'slug', 'did', 'memberRole'],
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                name: { type: 'string' },
+                slug: { type: 'string' },
+                did: { type: 'string' },
+                memberRole: { type: 'string', enum: ['member', 'admin', 'owner'] },
+              },
+            },
+          },
+        },
+      },
+      AuthResponse: {
+        type: 'object',
+        required: ['token', 'user'],
+        properties: {
+          token: { type: 'string', description: 'JWT Bearer token', example: 'eyJhbGciOi...' },
+          user: { $ref: '#/components/schemas/UserProfile' },
+        },
+      },
+      OrgRecord: {
+        type: 'object',
+        required: ['id', 'name', 'slug', 'did', 'createdAt'],
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string', example: 'Test University' },
+          slug: { type: 'string', example: 'test-university' },
+          did: { type: 'string', example: 'did:key:z6Mku...' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      OrgMember: {
+        type: 'object',
+        required: ['userId', 'email', 'name', 'role', 'joinedAt'],
+        properties: {
+          userId: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          name: { type: 'string' },
+          role: { type: 'string', enum: ['member', 'admin', 'owner'] },
+          joinedAt: { type: 'string', format: 'date-time' },
+        },
+      },
     },
   },
+  tags: [
+    { name: 'Email Auth', description: 'Email/password signup, login, and password reset (v1.2)' },
+    { name: 'Users', description: 'User profile management' },
+    { name: 'Admin', description: 'Administrative operations (requires X-Admin-Secret header)' },
+    { name: 'Organizations', description: 'Organization management — create orgs, manage members, and send invites' },
+    { name: 'Authentication', description: 'DID-based challenge–response authentication (cryptographic path)' },
+    { name: 'DID Management', description: 'Create and resolve did:key identities' },
+    { name: 'Verifiable Credentials', description: 'Issue, retrieve, and revoke BBS+-signed Verifiable Credentials' },
+    { name: 'Verifiable Presentations', description: 'Derive and verify selective-disclosure Verifiable Presentations' },
+    { name: 'Trust Registry', description: 'Manage trust attestations between attesters and issuers' },
+  ],
   paths: {
+    '/v1/auth/signup': {
+      post: {
+        tags: ['Email Auth'],
+        summary: 'Sign up with email and password',
+        description: `Create a new user account. A \`did:key\` identity is generated automatically and linked to the account — you do not need to call \`POST /v1/dids\` separately.
+
+**Returns:** A JWT Bearer token and the user profile including the generated DID.
+
+**Role:** All new accounts start with role \`subject\`. Use \`POST /v1/admin/users/{id}/role\` to upgrade to \`issuer\`, \`verifier\`, or \`attester\`.
+
+**Constraints:**
+- Email must be unique (409 \`EMAIL_TAKEN\` if already registered)
+- Password must be ≥ 8 characters
+- The private key for the generated DID is returned **only once** and not stored — save it if you intend to use DID challenge-response auth in parallel`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'password', 'name'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
+                  password: { type: 'string', minLength: 8, example: 'password123' },
+                  name: { type: 'string', example: 'Alice Smith' },
+                  organizationName: { type: 'string', example: 'Acme University', description: 'Optional display name for the user\'s organization affiliation.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Account created successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuthResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error (invalid email, password too short, missing fields)',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'Email already registered',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/auth/login': {
+      post: {
+        tags: ['Email Auth'],
+        summary: 'Log in with email and password',
+        description: `Exchange email + password credentials for a JWT Bearer token.
+
+**Token lifetime:** 15 minutes in production; 2 hours in non-production environments.
+
+**Security:** Uses Argon2id password hashing (OWASP parameters). Timing-safe comparison prevents email enumeration — both unknown-email and wrong-password return the same \`INVALID_CREDENTIALS\` error.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'password'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
+                  password: { type: 'string', example: 'password123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Login successful',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AuthResponse' } } },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Invalid credentials (wrong password or unknown email)',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/auth/forgot-password': {
+      post: {
+        tags: ['Email Auth'],
+        summary: 'Request password reset email',
+        description: `Triggers a password reset flow. A reset token (valid for **72 hours**) is generated and would be emailed to the user in a production deployment.
+
+**Security:** Always returns \`200\` with the same response shape regardless of whether the email is registered — this prevents email enumeration.
+
+**Development note:** The token is not actually emailed; retrieve it from the database directly for testing.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Reset email sent (or silently ignored for unknown addresses)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['message'],
+                  properties: { message: { type: 'string', example: 'If that email is registered, a reset link has been sent.' } },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/auth/reset-password': {
+      post: {
+        tags: ['Email Auth'],
+        summary: 'Reset password using token',
+        description: `Consume a password reset token and set a new password. The token is a 64-character hex string from the \`forgot-password\` flow.
+
+**One-time use:** The token is atomically consumed on success — re-using it returns \`410 Gone\`.
+
+**Side effect:** All existing sessions for the user are invalidated on successful reset.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'newPassword'],
+                properties: {
+                  token: { type: 'string', minLength: 64, maxLength: 64, example: 'a3f9e2b1...' },
+                  newPassword: { type: 'string', minLength: 8, example: 'newPassword1' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Password reset successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['message'],
+                  properties: { message: { type: 'string', example: 'Password reset successful.' } },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'Token not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '410': {
+            description: 'Token already used or expired',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/users/me': {
+      get: {
+        tags: ['Users'],
+        summary: 'Get current user profile',
+        description: `Returns the full profile for the currently authenticated user, including their DID, role, and a list of organizations they belong to.
+
+**Authentication:** Requires a valid Bearer JWT (from either \`/v1/auth/login\` or \`/v1/auth/verify\`).`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Profile retrieved',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/UserProfile' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+      patch: {
+        tags: ['Users'],
+        summary: 'Update current user profile',
+        description: `Update editable fields on the authenticated user's profile. All fields are optional — only send the fields you want to change.
+
+**Editable fields:** \`name\`, \`organizationName\`.
+
+**Non-editable:** \`email\`, \`did\`, \`role\` (use admin endpoint to change role).`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'Alice J. Smith' },
+                  organizationName: { type: 'string', example: 'MIT' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Profile updated',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/UserProfile' } } },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/admin/users/{id}/role': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Upgrade a user\'s DID role',
+        description: `Elevate a user's role to \`issuer\`, \`verifier\`, or \`attester\`. This also updates the underlying \`did:key\` record so the new role is reflected in the JWT on their next login.
+
+**Authentication:** Requires the \`X-Admin-Secret\` header to match the server's \`ADMIN_SECRET\` environment variable. The check is timing-safe.
+
+**Audit:** The role change is written to the audit log with action \`role_upgrade\`.`,
+        security: [],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'User ID (UUID) to upgrade',
+          },
+          {
+            name: 'X-Admin-Secret',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Server admin secret for administrative operations',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['role'],
+                properties: {
+                  role: { type: 'string', enum: ['issuer', 'verifier', 'attester'], example: 'issuer' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Role upgraded successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success'],
+                  properties: { success: { type: 'boolean', example: true } },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Missing or invalid X-Admin-Secret',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'User not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations': {
+      post: {
+        tags: ['Organizations'],
+        summary: 'Create an organization',
+        description: `Create a new organization with its own \`did:key\` identity. The caller becomes the organization **owner**.
+
+**DID role:** Specify the role the organization will play (\`issuer\`, \`verifier\`, etc.) — this determines what operations the org DID can perform.
+
+**Slug:** Auto-generated from the name (lowercased, spaces → hyphens, diacritics stripped). Must be unique — \`409 SLUG_TAKEN\` if already registered.
+
+**Authentication:** Requires a valid Bearer JWT.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'role'],
+                properties: {
+                  name: { type: 'string', example: 'Test University' },
+                  role: { type: 'string', enum: ['issuer', 'verifier', 'attester', 'subject'], example: 'issuer' },
+                  slug: { type: 'string', description: 'Custom slug (optional, auto-generated if omitted)', example: 'test-university' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Organization created',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/OrgRecord' },
+                    {
+                      type: 'object',
+                      required: ['memberRole'],
+                      properties: { memberRole: { type: 'string', enum: ['owner'], example: 'owner' } },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'Slug already taken',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations/{id}': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'Get organization details',
+        description: `Returns the organization record. Caller must be a member of the organization (any role).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Organization details',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/OrgRecord' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Caller is not a member of this organization',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'Organization not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+      delete: {
+        tags: ['Organizations'],
+        summary: 'Delete organization',
+        description: `Permanently deletes the organization, deactivates its DID, and removes all members and pending invites. **This action is irreversible.**
+
+**Authorization:** Caller must be an **owner** of the organization.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Organization deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success'],
+                  properties: { success: { type: 'boolean', example: true } },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Caller is not an owner',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'Organization not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations/{id}/members': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'List organization members',
+        description: `Returns all current members of the organization with their roles and join dates.
+
+**Authorization:** Caller must be a member of the organization (any role).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Members list',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['members'],
+                  properties: {
+                    members: { type: 'array', items: { $ref: '#/components/schemas/OrgMember' } },
+                  },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Caller is not a member',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'Organization not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations/{id}/members/{userId}': {
+      patch: {
+        tags: ['Organizations'],
+        summary: 'Update member role',
+        description: `Change the role of an existing organization member.
+
+**Role hierarchy:** \`member < admin < owner\`
+
+**Authorization rules:**
+- Caller must be **admin** or **owner**
+- Admins can promote members to \`admin\` but cannot assign \`owner\`
+- Owners can change anyone except themselves
+- Cannot demote the last owner (returns \`409 CANNOT_REMOVE_LAST_OWNER\`)`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Target member user ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['role'],
+                properties: {
+                  role: { type: 'string', enum: ['member', 'admin', 'owner'], example: 'admin' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Role updated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success'],
+                  properties: { success: { type: 'boolean', example: true } },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Insufficient org role',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'Cannot remove last owner',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+      delete: {
+        tags: ['Organizations'],
+        summary: 'Remove member from organization',
+        description: `Remove a user from the organization.
+
+**Self-removal:** Any member can remove themselves (leave the org).
+
+**Removing others:** Requires **admin** or **owner** role. Admins cannot remove owners.
+
+**Last owner protection:** Cannot remove the last owner — returns \`409 CANNOT_REMOVE_LAST_OWNER\`.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Target member user ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Member removed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success'],
+                  properties: { success: { type: 'boolean', example: true } },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Insufficient org role',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'Cannot remove last owner',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations/{id}/invites': {
+      post: {
+        tags: ['Organizations'],
+        summary: 'Invite a user to the organization',
+        description: `Invite someone to join the organization by email address.
+
+**If the email matches an existing user:** They are added directly as a member. Response includes \`userId\` and \`memberRole\`.
+
+**If the email is unknown:** A pending invite is created. Response includes a 64-character \`inviteToken\` (valid 72 hours) to share with the invitee. They must sign up and call \`POST /v1/organizations/invites/{token}/accept\`.
+
+**Authorization:** Caller must be **admin** or **owner** of the organization.
+
+**Duplicate guard:** Inviting a user who is already a member returns \`409 ALREADY_MEMBER\`.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'role'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'newmember@example.com' },
+                  role: { type: 'string', enum: ['member', 'admin'], example: 'member' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Invite created or member added directly',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    userId: { type: 'string', format: 'uuid', description: 'Set when the invitee is an existing user added directly' },
+                    memberRole: { type: 'string', enum: ['member', 'admin'], description: 'Set when the invitee is an existing user' },
+                    inviteToken: { type: 'string', minLength: 64, maxLength: 64, description: 'Set when the invitee email is unknown; share with the recipient' },
+                    expiresAt: { type: 'string', format: 'date-time', description: 'Expiry of the invite token' },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Caller is not an admin or owner',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'User is already a member',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/v1/organizations/invites/{token}/accept': {
+      post: {
+        tags: ['Organizations'],
+        summary: 'Accept an organization invite',
+        description: `Accept a pending organization invite using the token received from the inviter.
+
+**Email enforcement:** The invite is scoped to the email address it was sent to. If the authenticated user's email does not match the invite's target email, the request is rejected with \`403 FORBIDDEN\` (prevents BOLA attacks).
+
+**One-time use:** The token is marked as accepted on success. Re-using it returns \`409 INVITE_ALREADY_USED\`.
+
+**Expiry:** Tokens are valid for 72 hours from creation.
+
+**Authentication:** Caller must be authenticated (Bearer JWT).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'token', in: 'path', required: true, schema: { type: 'string', minLength: 64, maxLength: 64 }, description: '64-character hex invite token' },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { type: 'object' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Invite accepted — user is now a member',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['success'],
+                  properties: { success: { type: 'boolean', example: true } },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '403': {
+            description: 'Invite email does not match authenticated user email',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '404': {
+            description: 'Invite token not found',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '409': {
+            description: 'Invite already used or user is already a member',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+          '410': {
+            description: 'Invite token expired',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+          },
+        },
+      },
+    },
     '/v1/auth/challenge': {
       post: {
         tags: ['Authentication'],
