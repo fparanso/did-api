@@ -150,24 +150,24 @@ sequenceDiagram
 stateDiagram-v2
     direction TB
     [*] --> Account_Created : POST /v1/auth/signup
-    state "Account Created\n(role: subject)" as Account_Created
-    state "Role Upgraded\n(issuer / attester / verifier)" as Role_Upgraded
-    state "Org Created\n(org DID: issuer)" as Org_Created
+    state "Account Created<br>(role: subject)" as Account_Created
+    state "Role Upgraded<br>(issuer / attester / verifier)" as Role_Upgraded
+    state "Org Created<br>(org DID: issuer)" as Org_Created
     state "Issuer Trusted" as Issuer_Trusted
     state "VC Active" as VC_Active
     state "VP Derived" as VP_Derived
 
-    Account_Created --> Role_Upgraded : POST /v1/admin/users/{id}/role\n(requires X-Admin-Secret)
-    Account_Created --> Org_Created : POST /v1/organizations\n(any authenticated user)
-    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest\n(attester vouches for issuer DID)
-    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue\n(issuer + active attestation)
+    Account_Created --> Role_Upgraded : POST /v1/admin/users/{id}/role<br>(requires X-Admin-Secret)
+    Account_Created --> Org_Created : POST /v1/organizations<br>(any authenticated user)
+    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest<br>(attester vouches for issuer DID)
+    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue<br>(issuer + active attestation)
 
-    VC_Active --> VP_Derived : POST /v1/presentations/derive\n(subject · choose claims to reveal)
-    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke\n(issuer only · irreversible)
+    VC_Active --> VP_Derived : POST /v1/presentations/derive<br>(subject · choose claims to reveal)
+    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke<br>(issuer only · irreversible)
     VC_Active --> VC_Expired : expiresAt timestamp reached
 
-    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify\n✅ proof valid · issuer trusted · VC active
-    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify\n❌ invalid proof OR issuer untrusted OR VC revoked/expired
+    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify<br>✅ proof valid · issuer trusted · VC active
+    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify<br>❌ invalid proof OR issuer untrusted OR VC revoked/expired
 
     VC_Revoked --> [*]
     VC_Expired --> [*]
@@ -180,26 +180,26 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     subgraph Accounts["👥 Account Layer (v1.2)"]
-        AT_ACC(["🔐 Attester Account\nemail + password"])
-        IS_ACC(["🏛️ Issuer Account\nemail + password"])
-        SU_ACC(["👤 Subject Account\nemail + password"])
-        VE_ACC(["🔍 Verifier Account\nemail + password"])
-        ORG(["🏢 Organization\norgDid (issuer role)"])
+        AT_ACC(["🔐 Attester Account<br>email + password"])
+        IS_ACC(["🏛️ Issuer Account<br>email + password"])
+        SU_ACC(["👤 Subject Account<br>email + password"])
+        VE_ACC(["🔍 Verifier Account<br>email + password"])
+        ORG(["🏢 Organization<br>orgDid (issuer role)"])
     end
 
     subgraph Protocol["🔗 DID Protocol Layer"]
-        TR[("Trust Registry\ntrust_attestations")]
-        VC["BBS+ Verifiable\nCredential"]
-        VP["Verifiable Presentation\n(selective disclosure)"]
-        RES{{"Verification\nResult"}}
+        TR[("Trust Registry<br>trust_attestations")]
+        VC["BBS+ Verifiable<br>Credential"]
+        VP["Verifiable Presentation<br>(selective disclosure)"]
+        RES{{"Verification<br>Result"}}
     end
 
     IS_ACC -->|"owns / member of"| ORG
-    AT_ACC -->|"POST /v1/trust/attest\ngrant attestation"| TR
+    AT_ACC -->|"POST /v1/trust/attest<br>grant attestation"| TR
     TR -->|"authorises issuance"| IS_ACC
-    IS_ACC -->|"POST /v1/credentials/issue\nsign with BBS+"| VC
+    IS_ACC -->|"POST /v1/credentials/issue<br>sign with BBS+"| VC
     VC -->|"issued to"| SU_ACC
-    SU_ACC -->|"POST /v1/presentations/derive\nreveal chosen claims only"| VP
+    SU_ACC -->|"POST /v1/presentations/derive<br>reveal chosen claims only"| VP
     VP -->|"shared with"| VE_ACC
     VE_ACC -->|"POST /v1/presentations/verify"| RES
     TR -.->|"trust check"| RES
