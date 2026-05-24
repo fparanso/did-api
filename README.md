@@ -11,7 +11,7 @@ Unlike a proprietary credential system, this API is built entirely on open inter
 | [W3C Decentralized Identifiers (DID) 1.0](https://www.w3.org/TR/did-core/) | Every user and organisation gets a globally unique, self-owned identity (`did:key`) that no central authority controls |
 | [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Credentials are structured, machine-readable, and carry a cryptographic signature so recipients can prove they haven't been tampered with |
 | [BBS Cryptosuite 2023](https://www.w3.org/TR/vc-di-bbs/) | Holders can reveal only selected fields from a credential — share your degree without revealing your GPA — while the cryptographic proof still holds |
-| [Data Integrity 1.0](https://www.w3.org/TR/data-integrity/) | Defines how signatures are embedded in credentials, ensuring long-term verifiability without a proprietary format |
+| [Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/) | Defines how signatures are embedded in credentials, ensuring long-term verifiability without a proprietary format |
 
 > **Why this matters for developers:** You get a credential system that speaks the same language as emerging digital identity wallets, government ID programmes, and university transcript platforms — without writing any cryptography yourself.
 
@@ -595,6 +595,6 @@ Eleven tables cover the full protocol lifecycle:
 - [W3C DID Core 1.0](https://www.w3.org/TR/did-core/)
 - [W3C Verifiable Credentials Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/)
 - [BBS Cryptosuite 2023](https://www.w3.org/TR/vc-di-bbs/)
-- [Data Integrity 1.0](https://www.w3.org/TR/data-integrity/)
+- [Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/)
 - [did:key Method](https://w3c-ccg.github.io/did-method-key/)
 - [OWASP API Security Top 10](https://owasp.org/API-Security/)
