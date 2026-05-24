@@ -4,6 +4,19 @@ A REST API for issuing, sharing, and verifying tamper-proof digital credentials 
 
 Developers can use this API to add trusted credential management to any platform: a university issuing digital diplomas, a company managing employee certifications, or an app that lets users prove facts about themselves without oversharing. Built with **Bun** and **Hono**, production-ready and OWASP-compliant out of the box.
 
+### Built on W3C Open Standards
+
+Unlike a proprietary credential system, this API is built entirely on open internet standards published by the [World Wide Web Consortium (W3C)](https://www.w3.org) — the same body that standardises HTML and the web itself. That means credentials issued here are interoperable: any compliant system worldwide can read and verify them, with no vendor lock-in.
+
+| Standard | What it does in this API |
+|---|---|
+| [W3C Decentralized Identifiers (DID) 1.0](https://www.w3.org/TR/did-core/) | Every user and organisation gets a globally unique, self-owned identity (`did:key`) that no central authority controls |
+| [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Credentials are structured, machine-readable, and carry a cryptographic signature so recipients can prove they haven't been tampered with |
+| [BBS Cryptosuite 2023](https://www.w3.org/TR/vc-di-bbs/) | Holders can reveal only selected fields from a credential — share your degree without revealing your GPA — while the cryptographic proof still holds |
+| [Data Integrity 1.0](https://www.w3.org/TR/data-integrity/) | Defines how signatures are embedded in credentials, ensuring long-term verifiability without a proprietary format |
+
+> **Why this matters for developers:** You get a credential system that speaks the same language as emerging digital identity wallets, government ID programmes, and university transcript platforms — without writing any cryptography yourself.
+
 ---
 
 ## Overview
