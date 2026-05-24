@@ -1,6 +1,6 @@
 # DID++ REST API
 
-A complete and secure modern identity API for Web3 credentials management by impementing DID, VC, and ZKP. You can use this API  for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
+A complete and secure modern identity API for Web3 credentials management by implementing DID, VC, and ZKP. You can use this API  for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
 
 ### Built on W3C Open Standards
 
