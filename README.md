@@ -1,9 +1,6 @@
-# Decentralized Identity (DID) + Verifiable Credentials (VC) + Zero-Knowledge Proofs (ZKP) REST API
-## A complete and secure modern identity API.
+# DID++ REST API
 
-A REST API for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
-
-Developers can use this API to add trusted credential management to any platform: a university issuing digital diplomas, a company managing employee certifications, or an app that lets users prove facts about themselves without oversharing. Built with **Bun** and **Hono**, production-ready and OWASP-compliant out of the box.
+A complete and secure modern identity API for Web3 credentials management by impementing DID, VC, and ZKP. You can use this API  for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
 
 ### Built on W3C Open Standards
 
