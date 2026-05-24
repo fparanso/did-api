@@ -1,4 +1,5 @@
-# DID REST API
+# Decentralized Identity (DID) + Verifiable Credentials (VC) + Zero-Knowledge Proofs (ZKP) REST API
+## A complete and secure modern identity API.
 
 A REST API for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
 
