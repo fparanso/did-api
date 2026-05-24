@@ -1,4 +1,4 @@
-# DID + ZKP REST API
+# DID REST API
 
 A REST API for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
 
