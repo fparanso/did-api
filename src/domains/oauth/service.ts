@@ -2,12 +2,14 @@
 import { SignJWT, jwtVerify, importJWK, decodeJwt } from 'jose'
 import type { JWK } from 'jose'
 import { insertParRequest, consumeParRequest, insertAuthCode, consumeAuthCode,
-  createDpopNonce, isDpopNonceValid } from './repository.js'
+  createDpopNonce, isDpopNonceValid,
+  insertVpSession, findVpSession, findVpSessionByNonce, updateVpSession } from './repository.js'
 import { getDidRecord } from '../did/service.js'
 import { decryptKey } from '../../shared/crypto/keys.js'
-import { issueSdJwt } from '../../shared/crypto/sd-jwt.js'
+import { issueSdJwt, verifySdJwtPresentation } from '../../shared/crypto/sd-jwt.js'
 import { buildIssuerSigned } from '../../shared/crypto/mdoc.js'
 import { AppError } from '../../shared/errors.js'
+import { isIssuerTrusted } from '../trust/service.js'
 
 function getHost(): string {
   return process.env.ISSUER_HOST ?? 'http://localhost:3000'
@@ -168,4 +170,89 @@ export async function handleCredentialEndpoint(params: {
   }
 
   return { credential }
+}
+
+export async function handleVpInitiate(params: {
+  verifierDid: string | null
+  dcqlQuery: unknown
+}): Promise<{ sessionId: string; requestUri: string; nonce: string }> {
+  const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64url')
+  const sessionId = await insertVpSession({ nonce, verifierDid: params.verifierDid, dcqlQuery: params.dcqlQuery })
+  const requestUri = `${getHost()}/oauth/request/${sessionId}`
+  return { sessionId, requestUri, nonce }
+}
+
+export async function buildSignedRequestObject(sessionId: string, issuerPrivateJwk: JWK, issuerDid: string): Promise<string> {
+  const session = await findVpSession(sessionId)
+  if (!session) throw new AppError('NOT_FOUND', 'VP session not found', 404)
+  const host = getHost()
+  return new SignJWT({
+    response_type: 'vp_token',
+    response_mode: 'direct_post',
+    response_uri: `${host}/oauth/direct_post`,
+    client_id: issuerDid,
+    nonce: session.nonce,
+    dcql_query: session.dcqlQuery,
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'oauth-authz-req+jwt' })
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(await importJWK(issuerPrivateJwk, 'ES256'))
+}
+
+export async function handleDirectPost(params: {
+  vpToken: string
+  state?: string
+}): Promise<void> {
+  const token = params.vpToken.trim()
+  const isSdJwt = token.includes('~')
+
+  let nonce: string
+  let disclosedClaims: unknown
+  let issuerDid: string
+  let valid: boolean
+
+  if (isSdJwt) {
+    const parts = token.split('~')
+    const kbJwt = parts[parts.length - 1]
+    const kbPayload = JSON.parse(Buffer.from(kbJwt.split('.')[1], 'base64url').toString())
+    nonce = kbPayload.nonce
+    const audience = kbPayload.aud as string
+
+    const issuerJwt = parts[0]
+    const payloadB64 = issuerJwt.split('.')[1]
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
+    issuerDid = payload.iss as string
+
+    const issuerRecord = await getDidRecord(issuerDid)
+    const issuerPublicJwk: JWK = JSON.parse(issuerRecord.publicKey)
+
+    const result = await verifySdJwtPresentation({
+      combined: token, issuerPublicJwk, expectedNonce: nonce, expectedAudience: audience,
+    })
+    valid = result.valid
+    disclosedClaims = result.disclosedClaims
+  } else {
+    nonce = params.state ?? ''
+    issuerDid = ''
+    valid = false
+    disclosedClaims = {}
+    throw new AppError('UNSUPPORTED_FORMAT', 'mdoc direct_post not yet wired — use SD-JWT', 501)
+  }
+
+  const session = await findVpSessionByNonce(nonce)
+  if (!session) throw new AppError('INVALID_REQUEST', 'VP session nonce not found or expired', 400)
+
+  const issuerTrusted = issuerDid ? await isIssuerTrusted(issuerDid) : false
+
+  await updateVpSession(session.id as string, valid && issuerTrusted ? 'complete' : 'failed', {
+    valid, disclosedClaims, issuerDid, issuerTrusted,
+  })
+}
+
+export async function handleVpResult(sessionId: string) {
+  const session = await findVpSession(sessionId)
+  if (!session) throw new AppError('NOT_FOUND', 'VP session not found', 404)
+  if (session.status === 'pending') return { status: 'pending' }
+  return { status: session.status, result: session.result }
 }

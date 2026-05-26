@@ -4,10 +4,14 @@ import { z } from 'zod'
 import {
   buildIssuerMetadata, handlePar, handleAuthorize, handleToken,
   handleNonce, handleCredentialEndpoint,
+  handleVpInitiate, buildSignedRequestObject, handleDirectPost, handleVpResult,
 } from './service.js'
 import { jwtMiddleware } from '../auth/middleware.js'
 import type { HonoVariables } from '../../shared/types.js'
 import { AppError } from '../../shared/errors.js'
+import { getDidRecord } from '../did/service.js'
+import { decryptKey } from '../../shared/crypto/keys.js'
+import type { JWK } from 'jose'
 
 export const oauthRouter = new Hono<{ Variables: HonoVariables }>()
 export const wellKnownRouter = new Hono()
@@ -107,3 +111,45 @@ oauthRouter.post('/credentials', async c => {
 function getHost(): string {
   return process.env.ISSUER_HOST ?? 'http://localhost:3000'
 }
+
+// VP — initiate (verifier creates session)
+oauthRouter.post('/vp/initiate', jwtMiddleware, async c => {
+  const body = await c.req.json().catch(() => ({}))
+  const parsed = z.object({
+    dcql_query: z.unknown(),
+  }).safeParse(body)
+  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+  const result = await handleVpInitiate({ verifierDid: c.get('did'), dcqlQuery: parsed.data.dcql_query })
+  return c.json({ session_id: result.sessionId, request_uri: result.requestUri, nonce: result.nonce })
+})
+
+// VP — signed request object (wallet fetches)
+oauthRouter.get('/request/:id', jwtMiddleware, async c => {
+  const sessionId = c.req.param('id')
+  const issuerDid = c.get('did')
+  const issuerRecord = await getDidRecord(issuerDid)
+  const issuerPrivateJwk: JWK = JSON.parse(await decryptKey(issuerRecord.privateKey))
+  const jwt = await buildSignedRequestObject(sessionId, issuerPrivateJwk, issuerDid)
+  return new Response(jwt, { headers: { 'Content-Type': 'application/oauth-authz-req+jwt' } })
+})
+
+// VP — direct_post (wallet posts vp_token)
+oauthRouter.post('/direct_post', async c => {
+  const body = await c.req.parseBody()
+  const vpToken = body.vp_token as string
+  const state = body.state as string | undefined
+  if (!vpToken) return c.json({ error: 'invalid_request', error_description: 'Missing vp_token' }, 400)
+  try {
+    await handleDirectPost({ vpToken, state })
+    return c.json({ status: 'ok' })
+  } catch (err: any) {
+    if (err?.status === 501) return c.json({ error: 'unsupported_format' }, 501)
+    throw err
+  }
+})
+
+// VP — result (verifier polls)
+oauthRouter.get('/vp-result/:id', jwtMiddleware, async c => {
+  const result = await handleVpResult(c.req.param('id'))
+  return c.json(result)
+})

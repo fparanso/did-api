@@ -97,3 +97,42 @@ export async function isDpopNonceValid(nonce: string): Promise<boolean> {
   `
   return !!row
 }
+
+// VP Sessions ---------------------------------------------------------------
+
+export async function insertVpSession(params: {
+  nonce: string; verifierDid: string | null; dcqlQuery: unknown
+}): Promise<string> {
+  const expiresAt = new Date(Date.now() + 300_000) // 5 min
+  const [row] = await sql`
+    INSERT INTO vp_sessions (nonce, verifier_did, dcql_query, expires_at)
+    VALUES (${params.nonce}, ${params.verifierDid ?? null}, ${sql.json(params.dcqlQuery as any)}, ${expiresAt})
+    RETURNING id
+  `
+  return row.id as string
+}
+
+export async function findVpSession(id: string) {
+  const [row] = await sql`
+    SELECT id, nonce, verifier_did AS "verifierDid", dcql_query AS "dcqlQuery",
+           status, result, expires_at AS "expiresAt"
+    FROM vp_sessions WHERE id = ${id}
+  `
+  return row ?? null
+}
+
+export async function findVpSessionByNonce(nonce: string) {
+  const [row] = await sql`
+    SELECT id, nonce, verifier_did AS "verifierDid", dcql_query AS "dcqlQuery",
+           status, result, expires_at AS "expiresAt"
+    FROM vp_sessions WHERE nonce = ${nonce} AND expires_at > now()
+  `
+  return row ?? null
+}
+
+export async function updateVpSession(id: string, status: 'complete' | 'failed', result: unknown) {
+  await sql`
+    UPDATE vp_sessions SET status = ${status}, result = ${sql.json(result as any)}
+    WHERE id = ${id}
+  `
+}
