@@ -13,6 +13,7 @@ import { presentationRouter } from './domains/presentation/routes.js'
 import { trustRouter } from './domains/trust/routes.js'
 import { usersRouter } from './domains/users/routes.js'
 import { orgsRouter } from './domains/organizations/routes.js'
+import { oauthRouter, wellKnownRouter } from './domains/oauth/routes.js'
 import { openApiSpec } from './shared/openapi.js'
 import type { HonoVariables } from './shared/types.js'
 
@@ -54,6 +55,8 @@ app.route('/v1/auth', usersRouter)
 app.route('/v1/users', usersRouter)
 app.route('/v1/admin/users', usersRouter)
 app.route('/v1/organizations', orgsRouter)
+app.route('/oauth', oauthRouter)
+app.route('/.well-known', wellKnownRouter)
 
 // OpenAPI Spec & Scalar Reference UI
 app.get('/openapi.json', c => c.json(openApiSpec))
