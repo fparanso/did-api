@@ -39,29 +39,29 @@ All cryptography is **P-256 / ES256** throughout — no external crypto librarie
 ```mermaid
 flowchart LR
     subgraph Identity["🔑 Identity Layer"]
-        DID["did:key\n(P-256 keypair)"]
-        DOC["DID Document\n(Multikey · publicKeyJwk)"]
+        DID["did:key<br>(P-256 keypair)"]
+        DOC["DID Document<br>(Multikey · publicKeyJwk)"]
         DID -->|resolves to| DOC
     end
 
     subgraph Issuance["📜 Credential Issuance"]
-        VC_SDJWT["SD-JWT VC\n(dc+sd-jwt)\nES256 signed"]
-        VC_MDOC["mso_mdoc\n(ISO 18013-5)\nCOSE_Sign1"]
-        HOLDER["Holder Key\n(P-256 JWK)\ncnf.jwk binding"]
-        SLIST["Token Status List\nbitmap · signed JWT"]
+        VC_SDJWT["SD-JWT VC<br>(dc+sd-jwt)<br>ES256 signed"]
+        VC_MDOC["mso_mdoc<br>(ISO 18013-5)<br>COSE_Sign1"]
+        HOLDER["Holder Key<br>(P-256 JWK)<br>cnf.jwk binding"]
+        SLIST["Token Status List<br>bitmap · signed JWT"]
     end
 
     subgraph Presentation["🔍 Selective Disclosure"]
-        DISC["Selected Disclosures\n(salted claim hashes)"]
-        KB["KB-JWT\n(holder-signed)\nnonce · sd_hash"]
-        VP["SD-JWT VP\nissuerJwt~disc1~disc2~kbJwt"]
+        DISC["Selected Disclosures<br>(salted claim hashes)"]
+        KB["KB-JWT<br>(holder-signed)<br>nonce · sd_hash"]
+        VP["SD-JWT VP<br>issuerJwt~disc1~disc2~kbJwt"]
     end
 
     subgraph Verification["✅ Verification"]
-        SIG["Issuer P-256\nsignature check"]
-        HASH["Disclosure hash\nverification"]
-        TRUST["Trust registry\ncheck"]
-        REVOKE["Status List\nrevocation check"]
+        SIG["Issuer P-256<br>signature check"]
+        HASH["Disclosure hash<br>verification"]
+        TRUST["Trust registry<br>check"]
+        REVOKE["Status List<br>revocation check"]
     end
 
     DID --> VC_SDJWT
@@ -277,15 +277,15 @@ block-beta
   columns 3
 
   block:header["JWT Header"]:1
-    H["{ alg: ES256\n typ: dc+sd-jwt }"]
+    H["{ alg: ES256<br> typ: dc+sd-jwt }"]
   end
 
   block:payload["JWT Payload"]:1
-    P["{ iss: did:key:zDnae...\n sub: did:key:zDnae...\n vct: UniversityDegree\n cnf: { jwk: holderPublicKey }\n _sd: [ hash1, hash2, hash3 ] }"]
+    P["{ iss: did:key:zDnae...<br> sub: did:key:zDnae...<br> vct: UniversityDegree<br> cnf: { jwk: holderPublicKey }<br> _sd: [ hash1, hash2, hash3 ] }"]
   end
 
   block:sig["Issuer Signature"]:1
-    S["ES256\nP-256/SHA-256"]
+    S["ES256<br>P-256/SHA-256"]
   end
 
   block:discs["Selective Disclosures"]:3
@@ -340,7 +340,7 @@ sequenceDiagram
         API->>API: ④ Check credential status (active / revoked / expired)
     end
 
-    API-->>VE: { valid: true, disclosedClaims: { name, degree },\n  issuerTrusted: true, credentialStatus: "active" }
+    API-->>VE: { valid: true, disclosedClaims: { name, degree },<br>  issuerTrusted: true, credentialStatus: "active" }
 
     Note over VE: ✅ Verifier learns ONLY name + degree.<br/>GPA and nationality remain hidden.
 ```
@@ -361,14 +361,14 @@ sequenceDiagram
     rect rgb(220, 235, 255)
         Note over W: Step 0 — Discover issuer capabilities
         W->>AS: GET /.well-known/openid-credential-issuer
-        AS-->>W: { credential_endpoint, par_endpoint, token_endpoint,\n  credential_configurations_supported, dpop_signing_alg_values_supported: ["ES256"] }
+        AS-->>W: { credential_endpoint, par_endpoint, token_endpoint,<br>  credential_configurations_supported, dpop_signing_alg_values_supported: ["ES256"] }
     end
 
     rect rgb(255, 243, 220)
         Note over W: Step 1 — Pushed Authorization Request (PAR)
         W->>W: code_verifier = randomBytes(43-128 chars)
         W->>W: code_challenge = BASE64URL(SHA-256(code_verifier))
-        W->>AS: POST /oauth/par<br/>{ response_type:code, client_id:walletDid,\n  redirect_uri, code_challenge, code_challenge_method:S256,\n  authorization_details:[{type, credential_configuration_id}] }
+        W->>AS: POST /oauth/par<br/>{ response_type:code, client_id:walletDid,<br>  redirect_uri, code_challenge, code_challenge_method:S256,<br>  authorization_details:[{type, credential_configuration_id}] }
         AS-->>W: { request_uri: "urn:ietf:params:oauth:request_uri:...", expires_in: 90 }
     end
 
@@ -383,10 +383,10 @@ sequenceDiagram
         Note over W: Step 3 — Token exchange with DPoP
         W->>W: Build DPoP proof JWT:<br/>{ typ:"dpop+jwt", alg:"ES256",<br/>  jwk: walletPublicKey,<br/>  htm:"POST", htu:"…/oauth/token", iat }
         W->>W: Sign DPoP proof with wallet P-256 key
-        W->>AS: POST /oauth/token<br/>{ grant_type:authorization_code, code, redirect_uri,\n  client_id, code_verifier }<br/>DPoP: <proof JWT>
+        W->>AS: POST /oauth/token<br/>{ grant_type:authorization_code, code, redirect_uri,<br>  client_id, code_verifier }<br/>DPoP: <proof JWT>
         AS->>AS: Verify DPoP proof (signature + htm/htu/iat)
         AS->>AS: Verify PKCE: BASE64URL(SHA-256(code_verifier)) == code_challenge
-        AS-->>W: { access_token, token_type:"DPoP", expires_in:300,\n  c_nonce, c_nonce_expires_in }
+        AS-->>W: { access_token, token_type:"DPoP", expires_in:300,<br>  c_nonce, c_nonce_expires_in }
     end
 
     rect rgb(255, 230, 220)
@@ -417,7 +417,7 @@ sequenceDiagram
 
     rect rgb(220, 235, 255)
         Note over VE: Step 1 — Verifier initiates a VP session
-        VE->>API: POST /oauth/vp/initiate<br/>{ dcqlQuery: { credentials: [{ format:"dc+sd-jwt",\n  meta:{vct_values:[...]}, claims:[{path:["name"]}] }] } }<br/>Authorization: Bearer <verifierToken>
+        VE->>API: POST /oauth/vp/initiate<br/>{ dcqlQuery: { credentials: [{ format:"dc+sd-jwt",<br>  meta:{vct_values:[...]}, claims:[{path:["name"]}] }] } }<br/>Authorization: Bearer <verifierToken>
         API->>API: Create VP session, generate nonce
         API-->>VE: { sessionId, requestUri:"http://…/oauth/request/{id}", nonce }
     end
@@ -426,7 +426,7 @@ sequenceDiagram
         Note over W: Step 2 — Wallet fetches signed request object
         Note over VE,W: Verifier shares requestUri with wallet (QR code, deep-link)
         W->>API: GET /oauth/request/{sessionId}
-        API->>API: Build JAR JWT:<br/>{ typ:"oauth-authz-req+jwt", alg:"ES256",\n  client_id:verifierDid, response_uri:"…/direct_post",\n  response_mode:"direct_post", nonce, dcql_query }
+        API->>API: Build JAR JWT:<br/>{ typ:"oauth-authz-req+jwt", alg:"ES256",<br>  client_id:verifierDid, response_uri:"…/direct_post",<br>  response_mode:"direct_post", nonce, dcql_query }
         API->>API: Sign JAR with verifier P-256 key
         API-->>W: Signed JAR JWT (application/oauth-authz-req+jwt)
         W->>W: Verify JAR signature against verifier DID document
@@ -439,7 +439,7 @@ sequenceDiagram
         W->>W: Filter disclosures matching DCQL claims query
         W->>W: partialSdJwt = issuerJwt~disc_name~ (trailing ~)
         W->>W: sd_hash = BASE64URL(SHA-256(partialSdJwt))
-        W->>W: Build KB-JWT:<br/>{ typ:"kb+jwt", alg:"ES256",\n  nonce (from JAR), aud:verifierDid,\n  iat, sd_hash }
+        W->>W: Build KB-JWT:<br/>{ typ:"kb+jwt", alg:"ES256",<br>  nonce (from JAR), aud:verifierDid,<br>  iat, sd_hash }
         W->>W: Sign KB-JWT with holder P-256 key (matches cnf.jwk)
         W->>W: vpToken = issuerJwt~disc_name~kbJwt
     end
@@ -467,7 +467,7 @@ sequenceDiagram
     rect rgb(220, 255, 255)
         Note over VE: Step 5 — Verifier polls for result
         VE->>API: GET /oauth/vp-result/{sessionId}
-        API-->>VE: { state:"verified",\n  disclosedClaims:{ name:"Alice Smith" },\n  verifiedAt }
+        API-->>VE: { state:"verified",<br>  disclosedClaims:{ name:"Alice Smith" },<br>  verifiedAt }
     end
 ```
 
@@ -481,7 +481,7 @@ The Key Binding JWT is what proves the person presenting the credential actually
 flowchart TB
     subgraph Issued["Issued SD-JWT VC (stored by wallet)"]
         direction LR
-        IJwt["issuerJwt\n(ES256 · P-256)\n─────────────\ncnf.jwk = holderPubKey\n_sd = [hash1, hash2, hash3]"]
+        IJwt["issuerJwt<br>(ES256 · P-256)<br>─────────────<br>cnf.jwk = holderPubKey<br>_sd = [hash1, hash2, hash3]"]
         D1["~[salt1, name, Alice]~"]
         D2["~[salt2, degree, BSc]~"]
         D3["~[salt3, gpa, 3.9]~"]
@@ -491,18 +491,18 @@ flowchart TB
         direction LR
         PJwt["issuerJwt"]
         PD1["~[salt1, name, Alice]~"]
-        KB["kbJwt\n(ES256 · holderKey)\n─────────────\nnonce: session nonce\naud: verifierDid\nsd_hash: SHA-256(issuerJwt~disc1~)\niat: now"]
+        KB["kbJwt<br>(ES256 · holderKey)<br>─────────────<br>nonce: session nonce<br>aud: verifierDid<br>sd_hash: SHA-256(issuerJwt~disc1~)<br>iat: now"]
     end
 
     subgraph Checks["Verifier Checks"]
-        C1["✅ issuerJwt signature\n(issuer P-256 key)"]
+        C1["✅ issuerJwt signature<br>(issuer P-256 key)"]
         C2["✅ disc_name hash ∈ _sd"]
-        C3["✅ kbJwt signature\n(holderKey = cnf.jwk)"]
+        C3["✅ kbJwt signature<br>(holderKey = cnf.jwk)"]
         C4["✅ nonce matches session"]
         C5["✅ sd_hash matches content"]
     end
 
-    IJwt -->|"reveal name only\n(drop disc2, disc3)"| PJwt
+    IJwt -->|"reveal name only<br>(drop disc2, disc3)"| PJwt
     D1 --> PD1
     PJwt & PD1 -->|"sd_hash = SHA-256(ijwt~disc1~)"| KB
     PJwt --> C1
@@ -541,7 +541,7 @@ sequenceDiagram
         API->>DB: SELECT all credentials WHERE status_list_id = ?
         API->>API: Build bitset: bit[statusListIndex] = 1 if revoked else 0
         API->>API: DEFLATE-compress bitset
-        API->>API: Build JWT { typ:"statuslist+jwt",\n  status_list: { bits:1, lst: BASE64URL(compressed) } }
+        API->>API: Build JWT { typ:"statuslist+jwt",<br>  status_list: { bits:1, lst: BASE64URL(compressed) } }
         API->>API: Sign JWT with issuer P-256 key (ES256)
     end
 
@@ -594,7 +594,7 @@ sequenceDiagram
 
     rect rgb(255, 243, 220)
         Note over IS,SU: Phase 3 — Credential Issuance
-        IS->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType:["UniversityDegree"],\n  claims:{ name, degree, gpa } }
+        IS->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType:["UniversityDegree"],<br>  claims:{ name, degree, gpa } }
         Note over API: ① Trust check ② SD-JWT VC (ES256) ③ mso_mdoc (COSE_Sign1)<br/>④ Ephemeral holder key ⑤ Token Status List index assigned
         API-->>IS: { id:credId, sdJwt, mdoc, holderKey }
         IS->>SU: Share credId out-of-band (QR code, secure message)
@@ -611,7 +611,7 @@ sequenceDiagram
         SU->>VE: Send sdJwtPresentation
         VE->>API: POST /v1/presentations/verify { presentation }
         Note over API: ① ES256 sig ② disclosure hashes ③ trust check ④ status list
-        API-->>VE: { valid:true, disclosedClaims:{ name, degree },\n  issuerTrusted:true, credentialStatus:"active" }
+        API-->>VE: { valid:true, disclosedClaims:{ name, degree },<br>  issuerTrusted:true, credentialStatus:"active" }
     end
 ```
 
@@ -625,26 +625,26 @@ stateDiagram-v2
 
     [*] --> Account_Created : POST /v1/auth/signup
 
-    state "Account\n(role: subject)" as Account_Created
-    state "Role Upgraded\n(issuer / attester / verifier)" as Role_Upgraded
-    state "Issuer Trusted\n(active attestation)" as Issuer_Trusted
-    state "Credential Issued\n(SD-JWT VC + mso_mdoc)" as VC_Active
-    state "Presentation Derived\n(selective SD-JWT)" as VP_Derived
+    state "Account<br>(role: subject)" as Account_Created
+    state "Role Upgraded<br>(issuer / attester / verifier)" as Role_Upgraded
+    state "Issuer Trusted<br>(active attestation)" as Issuer_Trusted
+    state "Credential Issued<br>(SD-JWT VC + mso_mdoc)" as VC_Active
+    state "Presentation Derived<br>(selective SD-JWT)" as VP_Derived
     state "Presentation Verified ✅" as VP_OK
     state "Presentation Failed ❌" as VP_FAIL
     state "Revoked" as VC_Revoked
     state "Expired" as VC_Expired
 
     Account_Created --> Role_Upgraded : POST /v1/admin/users/{id}/role
-    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest\n(attester vouches for issuer)
-    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue\n(ES256 SD-JWT + COSE_Sign1 mdoc)
+    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest<br>(attester vouches for issuer)
+    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue<br>(ES256 SD-JWT + COSE_Sign1 mdoc)
 
-    VC_Active --> VP_Derived : POST /v1/presentations/derive\n(subject · choose revealedClaims)
-    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke\n(issuer · bit flipped in Status List)
+    VC_Active --> VP_Derived : POST /v1/presentations/derive<br>(subject · choose revealedClaims)
+    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke<br>(issuer · bit flipped in Status List)
     VC_Active --> VC_Expired : expiresAt reached
 
-    VP_Derived --> VP_OK : POST /v1/presentations/verify\n✅ sig · hashes · trust · status
-    VP_Derived --> VP_FAIL : POST /v1/presentations/verify\n❌ invalid sig OR revoked OR untrusted
+    VP_Derived --> VP_OK : POST /v1/presentations/verify<br>✅ sig · hashes · trust · status
+    VP_Derived --> VP_FAIL : POST /v1/presentations/verify<br>❌ invalid sig OR revoked OR untrusted
 
     VC_Revoked --> [*]
     VC_Expired --> [*]
