@@ -7,7 +7,7 @@ process.env.JWT_SECRET = 'test-secret'
 process.env.NODE_ENV = 'test'
 process.env.CORS_ORIGIN = 'http://localhost:3000'
 
-import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
+import { importJWK } from 'jose'
 
 let app: { fetch: (req: Request) => Promise<Response> }
 let sql: any
@@ -19,8 +19,9 @@ async function createAndAuth(role: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role }),
   }))
-  const { did, privateKey: privateKeyMultibase } = await createRes.json()
-  const publicKeyMultibase = did.replace('did:key:', '')
+  const createBody = await createRes.json()
+  const did: string = createBody.did
+  const privateKeyJwk = createBody.privateKey
 
   const chalRes = await app.fetch(new Request('http://localhost/v1/auth/challenge', {
     method: 'POST',
@@ -29,13 +30,10 @@ async function createAndAuth(role: string) {
   }))
   const { challengeId, nonce } = await chalRes.json()
 
-  const keyPair = await Ed25519VerificationKey2020.from({
-    type: 'Ed25519VerificationKey2020',
-    publicKeyMultibase,
-    privateKeyMultibase,
-  })
-  const sigBytes = await keyPair.signer().sign({ data: new TextEncoder().encode(`${did}:${nonce}`) })
-  const signature = Buffer.from(sigBytes).toString('base64')
+  const privateKey = await importJWK(privateKeyJwk, 'ES256') as CryptoKey
+  const message = new TextEncoder().encode(`${did}:${nonce}`)
+  const sigDer = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, message)
+  const signature = Buffer.from(sigDer).toString('base64')
 
   const verRes = await app.fetch(new Request('http://localhost/v1/auth/verify', {
     method: 'POST',

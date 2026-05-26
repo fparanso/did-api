@@ -8,7 +8,7 @@ process.env.ADMIN_SECRET = 'test-admin-secret'
 process.env.NODE_ENV = 'test'
 process.env.CORS_ORIGIN = 'http://localhost:3000'
 
-import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
+import { importJWK } from 'jose'
 
 let app: { fetch: (req: Request) => Promise<Response> }
 let sql: any
@@ -23,20 +23,17 @@ async function createDid(role: string) {
   return res.json()
 }
 
-async function getAuth(did: string, privateKeyMultibase: string) {
-  const publicKeyMultibase = did.replace('did:key:', '')
+async function getAuth(did: string, privateKeyJwk: unknown) {
   const chalRes = await app.fetch(new Request('http://localhost/v1/auth/challenge', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ did }),
   }))
   const { challengeId, nonce } = await chalRes.json()
-  const kp = await Ed25519VerificationKey2020.from({
-    type: 'Ed25519VerificationKey2020',
-    publicKeyMultibase,
-    privateKeyMultibase,
-  })
-  const sig = Buffer.from(await kp.signer().sign({ data: new TextEncoder().encode(`${did}:${nonce}`) })).toString('base64')
+  const privateKey = await importJWK(privateKeyJwk as any, 'ES256') as CryptoKey
+  const message = new TextEncoder().encode(`${did}:${nonce}`)
+  const sigDer = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, message)
+  const sig = Buffer.from(sigDer).toString('base64')
   const verRes = await app.fetch(new Request('http://localhost/v1/auth/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -76,8 +73,8 @@ afterAll(async () => {
 
 describe('API2 — Broken Authentication: nonce replay prevention', () => {
   test('replaying a used nonce returns 401 CHALLENGE_EXPIRED', async () => {
-    const { did, privateKey: privateKeyMultibase } = await createDid('subject')
-    const { token, challengeId, nonce, signature } = await getAuth(did, privateKeyMultibase)
+    const { did, privateKey } = await createDid('subject')
+    const { token, challengeId, nonce, signature } = await getAuth(did, privateKey)
     expect(token).toBeTruthy()
 
     // Try to use the same challengeId+signature again
@@ -95,7 +92,7 @@ describe('API1 — Broken Object Level Authorization', () => {
   test('subject cannot read another subject credential', async () => {
     const { did: attesterDid, privateKey: attesterPriv } = await createDid('attester')
     const { did: issuerDid, privateKey: issuerPriv } = await createDid('issuer')
-    const { did: sub1Did, privateKey: sub1Priv } = await createDid('subject')
+    const { did: sub1Did } = await createDid('subject')
     const { did: sub2Did, privateKey: sub2Priv } = await createDid('subject')
 
     const { token: attesterToken } = await getAuth(attesterDid, attesterPriv)
