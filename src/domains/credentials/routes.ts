@@ -7,10 +7,10 @@ import {
   listCredentials,
   revokeCredentialById,
   getCredentialStatus,
+  buildStatusList,
 } from './service.js'
 import { jwtMiddleware, requireRole } from '../auth/middleware.js'
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js'
-import { AppError } from '../../shared/errors.js'
 import type { HonoVariables } from '../../shared/types.js'
 
 export const credentialsRouter = new Hono<{ Variables: HonoVariables }>()
@@ -20,6 +20,14 @@ const IssueSchema = z.object({
   credentialType: z.array(z.string()).min(1),
   claims: z.record(z.unknown()),
   expiresAt: z.string().datetime().optional(),
+})
+
+// Public — Token Status List 1.0
+credentialsRouter.get('/status-lists/:id', async c => {
+  const jwt = await buildStatusList(c.req.param('id'))
+  return new Response(jwt, {
+    headers: { 'Content-Type': 'application/statuslist+jwt' },
+  })
 })
 
 // Public — status check (before protected routes)
