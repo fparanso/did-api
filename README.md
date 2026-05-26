@@ -1,233 +1,654 @@
-# DID++ REST API
+# DID + HAIP REST API
 
-A complete and secure modern identity API for Web3 credentials management by implementing DID, VC, and ZKP. You can use this API  for issuing, sharing, and verifying tamper-proof digital credentials — degrees, certificates, badges — where users control exactly what they share.
+A production-ready identity API aligned with the **OpenID4VC High Assurance Interoperability Profile 1.0 (HAIP)**. Issue, share, and verify tamper-proof digital credentials using **SD-JWT VC** (`dc+sd-jwt`) and **ISO 18013-5 mso_mdoc** — the same formats used in government digital ID programmes, EUDI wallets, and mobile driver's licences.
 
-### Built on W3C Open Standards
-
-Unlike a proprietary credential system, this API is built entirely on open internet standards published by the [World Wide Web Consortium (W3C)](https://www.w3.org) — the same body that standardises HTML and the web itself. That means credentials issued here are interoperable: any compliant system worldwide can read and verify them, with no vendor lock-in.
-
-| Standard | What it does in this API |
-|---|---|
-| [W3C Decentralized Identifiers (DID) 1.0](https://www.w3.org/TR/did-core/) | Every user and organisation gets a globally unique, self-owned identity (`did:key`) that no central authority controls |
-| [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Credentials are structured, machine-readable, and carry a cryptographic signature so recipients can prove they haven't been tampered with |
-| [BBS Cryptosuite 2023](https://www.w3.org/TR/vc-di-bbs/) | Holders can reveal only selected fields from a credential — share your degree without revealing your GPA — while the cryptographic proof still holds |
-| [Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/) | Defines how signatures are embedded in credentials, ensuring long-term verifiability without a proprietary format |
-
-> **Why this matters for developers:** You get a credential system that speaks the same language as emerging digital identity wallets, government ID programmes, and university transcript platforms — without writing any cryptography yourself.
+All cryptography is **P-256 / ES256** throughout — no external crypto libraries, no BLS, no JSON-LD. Built on Bun + Hono + PostgreSQL.
 
 ---
 
-## Overview
+## Standards Alignment
 
-This API enables four actor roles to participate in a full decentralized identity ecosystem:
-
-| Role | Description |
+| Standard | Role in this API |
 |---|---|
-| **Subject** | Holds credentials and creates selective-disclosure presentations |
-| **Issuer** | Signs and issues Verifiable Credentials to subjects |
-| **Verifier** | Verifies presented credentials and their proofs |
-| **Attester** | Acts as a trust registry, vouching for issuer authority |
-
-### Key Capabilities
-
-- **Email/password accounts** — sign up and log in; a `did:key` is auto-generated per account (v1.2)
-- **Organizations** — group accounts under a shared institutional DID (v1.2)
-- **`did:key`** — self-sovereign DID generation (Ed25519 + BLS12-381 G2 keys)
-- **BBS+ Signatures** (`bbs-2023`) — sign multi-claim credentials and derive selective-disclosure proofs
-- **W3C VC Data Model 2.0** — `DataIntegrityProof` with JSON-LD, fully spec-compliant
-- **DID Auth** — challenge/response authentication using Ed25519 key signatures (alternative path)
-- **Trust Registry** — attesters issue attestation VCs to authorize issuers
-- **OWASP API Security Top 10** — compliant security controls throughout
+| [OpenID4VC HAIP 1.0](https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0-final.html) | Top-level interoperability profile — mandates P-256, SD-JWT VC, DPoP, PKCE |
+| [W3C DID Core 1.0](https://www.w3.org/TR/did-core/) | Every actor gets a `did:key` (P-256 multikey) — globally unique, self-sovereign |
+| [SD-JWT VC (`dc+sd-jwt`)](https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html) | Credential format with per-claim salted hashes for selective disclosure |
+| [ISO 18013-5 mso_mdoc](https://www.iso.org/standard/69084.html) | CBOR/COSE credential format used by mobile driver's licences and EUDI |
+| [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Authorization-code issuance flow: PAR + PKCE + DPoP + key proof JWT |
+| [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) | Verifier-initiated presentation flow: signed JAR + KB-JWT holder binding |
+| [Token Status List 1.0](https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-06.html) | Compact bitmap revocation registry signed as a JWT |
+| [RFC 9449 — DPoP](https://www.rfc-editor.org/rfc/rfc9449) | Demonstration of Proof of Possession — key-bound access tokens |
+| [OWASP API Security Top 10](https://owasp.org/API-Security/) | Security controls on every endpoint |
 
 ---
 
-## Identity Lifecycle
+## Actors & Roles
 
-The full lifecycle spans five phases:
+| Role | Responsibility |
+|---|---|
+| **Attester** | Trust anchor — vouches for which issuers may sign credentials |
+| **Issuer** | Signs SD-JWT VC + mso_mdoc credentials for subjects (requires active trust attestation) |
+| **Subject / Wallet** | Holds credentials; derives selective-disclosure presentations |
+| **Verifier** | Validates presentations against cryptographic proof, trust chain, and revocation |
+| **Admin** | Upgrades account roles via server-side secret |
 
-1. **Account & role setup** — sign up, get roles assigned
-2. **Organization setup** — create an institutional identity, invite members
-3. **Trust setup** — attester vouches for the issuer
-4. **Credential issuance** — issuer signs a BBS+ VC for a subject
-5. **Selective-disclosure verification** — subject reveals only chosen claims
+---
 
-### End-to-End Sequence
+## How It Works — Concept Overview
+
+```mermaid
+flowchart LR
+    subgraph Identity["🔑 Identity Layer"]
+        DID["did:key\n(P-256 keypair)"]
+        DOC["DID Document\n(Multikey · publicKeyJwk)"]
+        DID -->|resolves to| DOC
+    end
+
+    subgraph Issuance["📜 Credential Issuance"]
+        VC_SDJWT["SD-JWT VC\n(dc+sd-jwt)\nES256 signed"]
+        VC_MDOC["mso_mdoc\n(ISO 18013-5)\nCOSE_Sign1"]
+        HOLDER["Holder Key\n(P-256 JWK)\ncnf.jwk binding"]
+        SLIST["Token Status List\nbitmap · signed JWT"]
+    end
+
+    subgraph Presentation["🔍 Selective Disclosure"]
+        DISC["Selected Disclosures\n(salted claim hashes)"]
+        KB["KB-JWT\n(holder-signed)\nnonce · sd_hash"]
+        VP["SD-JWT VP\nissuerJwt~disc1~disc2~kbJwt"]
+    end
+
+    subgraph Verification["✅ Verification"]
+        SIG["Issuer P-256\nsignature check"]
+        HASH["Disclosure hash\nverification"]
+        TRUST["Trust registry\ncheck"]
+        REVOKE["Status List\nrevocation check"]
+    end
+
+    DID --> VC_SDJWT
+    DID --> VC_MDOC
+    HOLDER --> KB
+    VC_SDJWT --> DISC
+    DISC --> VP
+    KB --> VP
+    VP --> SIG & HASH & TRUST & REVOKE
+
+    style Identity fill:#dce8ff,stroke:#4a90d9
+    style Issuance fill:#dcffe8,stroke:#27ae60
+    style Presentation fill:#f5dcff,stroke:#8e44ad
+    style Verification fill:#fff3dc,stroke:#e6a817
+```
+
+---
+
+## Part 1 — Identity Creation
+
+### 1-A. Generating a DID (P-256 `did:key`)
+
+Every actor — human or machine — starts by generating a `did:key` identity backed by a **P-256 keypair**. The DID is derived deterministically from the compressed public key using a multicodec prefix.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client / Wallet
+    participant API as DID + HAIP API
+    participant DB as PostgreSQL
+
+    Note over C,API: POST /v1/dids  { role: "subject" }
+
+    C->>API: Create DID request
+
+    rect rgb(220, 235, 255)
+        Note over API: Key Generation (Web Crypto API)
+        API->>API: crypto.subtle.generateKey(P-256, extractable)
+        API->>API: Export publicKeyJwk + privateKeyJwk
+        API->>API: Compress public key → 33 bytes (x coord + sign bit)
+        API->>API: Prepend multicodec [0x80, 0x24] → 35 bytes
+        API->>API: base58btc encode → zDnae...
+        API->>API: did = "did:key:zDnae..."
+    end
+
+    rect rgb(220, 255, 230)
+        Note over API: Build DID Document
+        API->>API: verificationMethod: { type: Multikey, publicKeyJwk }
+        API->>API: authentication + assertionMethod arrays
+    end
+
+    rect rgb(255, 243, 220)
+        Note over API,DB: Persist
+        API->>API: AES-GCM encrypt(privateKeyJwk) → encryptedPrivateKey
+        API->>DB: INSERT dids (id, role, document, publicKey, encryptedPrivateKey)
+    end
+
+    API-->>C: { did, document, privateKey: JWK } ← private key returned ONCE only
+
+    Note over C: ⚠️ Client must store the privateKey JWK securely.<br/>The server never stores the raw private key.
+```
+
+**What you get back:**
+```json
+{
+  "did": "did:key:zDnaeWJjH...",
+  "role": "subject",
+  "document": {
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    "id": "did:key:zDnaeWJjH...",
+    "verificationMethod": [{
+      "type": "Multikey",
+      "publicKeyJwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+    }]
+  },
+  "privateKey": { "kty": "EC", "crv": "P-256", "x": "...", "y": "...", "d": "..." }
+}
+```
+
+---
+
+### 1-B. Authenticating with Your DID (P-256 Challenge-Response)
+
+Once you have a DID, you authenticate using a **cryptographic challenge-response** — no password required.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Wallet / Client
+    participant API as DID + HAIP API
+    participant DB as PostgreSQL
+
+    W->>API: POST /v1/auth/challenge { did }
+    API->>DB: Look up DID → fetch publicKeyJwk
+    API->>DB: INSERT auth_challenges (challengeId, nonce, expiresIn: 5min)
+    API-->>W: { challengeId, nonce }
+
+    rect rgb(220, 235, 255)
+        Note over W: Sign the challenge (Web Crypto API)
+        W->>W: message = UTF8(did + ":" + nonce)
+        W->>W: sigDer = crypto.subtle.sign({ name:"ECDSA", hash:"SHA-256" }, privateKey, message)
+        W->>W: signature = base64(sigDer)
+    end
+
+    W->>API: POST /v1/auth/verify { did, challengeId, signature }
+
+    rect rgb(220, 255, 230)
+        Note over API: Verification
+        API->>DB: Fetch challenge by challengeId (must be unused, within TTL)
+        API->>DB: Mark challenge as used (nonce replay prevention)
+        API->>DB: Fetch publicKeyJwk for DID
+        API->>API: crypto.subtle.verify(ECDSA/SHA-256, publicKey, sigDer, message)
+    end
+
+    API-->>W: { token: "eyJhbGci..." } ← 15-minute JWT Bearer token
+
+    Note over W: Use token as Authorization: Bearer <token> on all protected endpoints
+```
+
+---
+
+## Part 2 — Credential Issuance (Direct REST API)
+
+### 2-A. Trust Setup — Authorising an Issuer
+
+Before an issuer can sign credentials, an **attester** must vouch for them in the trust registry.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor AD as 🛡️ Admin
     actor AT as 🔐 Attester
-    actor OW as 🏛️ Org Owner (Issuer)
+    actor IS as 🏛️ Issuer
+    participant API as DID + HAIP API
+
+    Note over AD,IS: Role assignment (one-time setup)
+
+    AD->>API: POST /v1/admin/users/{issuerId}/role { role:"issuer" }
+    API-->>AD: { success: true }
+
+    AD->>API: POST /v1/admin/users/{attesterId}/role { role:"attester" }
+    API-->>AD: { success: true }
+
+    Note over AT: Attester logs in with their newly assigned role
+    AT->>API: POST /v1/auth/login { email, password }
+    API-->>AT: { token }  ← JWT carries role:"attester"
+
+    AT->>API: POST /v1/trust/attest { issuerDid: "did:key:zDnae..." }
+    Note over API: Persists trust_attestation record<br/>Issuer is now in the active trust registry
+    API-->>AT: { id, issuerDid, attesterDid, createdAt }
+
+    Note over IS: Verifier can check any time
+    IS->>API: GET /v1/trust/issuers/{issuerDid}
+    API-->>IS: { trusted: true }
+```
+
+---
+
+### 2-B. Issuing an SD-JWT VC + mso_mdoc Credential
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor IS as 🏛️ Issuer
     actor SU as 👤 Subject
-    actor VE as 🔍 Verifier
-    participant API as DID + ZKP API
+    participant API as DID + HAIP API
+    participant DB as PostgreSQL
+
+    IS->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType, claims }
 
     rect rgb(220, 235, 255)
-        Note over AD,API: Phase 1 — Account & Role Setup
-
-        OW->>API: POST /v1/auth/signup { email, password, name }
-        API-->>OW: { token, user: { id, did, role:"subject" } }
-
-        AT->>API: POST /v1/auth/signup { email, password, name }
-        API-->>AT: { token, user: { id, did, role:"subject" } }
-
-        SU->>API: POST /v1/auth/signup { email, password, name }
-        API-->>SU: { token, user: { id, did, role:"subject" } }
-
-        VE->>API: POST /v1/auth/signup { email, password, name }
-        API-->>VE: { token, user: { id, did, role:"subject" } }
-
-        Note over AD: Admin upgrades roles using X-Admin-Secret header
-        AD->>API: POST /v1/admin/users/{attesterUserId}/role { role:"attester" }
-        API-->>AD: { success: true }
-
-        AD->>API: POST /v1/admin/users/{ownerUserId}/role { role:"issuer" }
-        API-->>AD: { success: true }
-
-        AD->>API: POST /v1/admin/users/{verifierUserId}/role { role:"verifier" }
-        API-->>AD: { success: true }
-
-        Note over OW,VE: Everyone logs in again to get a fresh JWT reflecting the new role
-        OW->>API: POST /v1/auth/login { email, password }
-        API-->>OW: { token } ← JWT now carries role:"issuer"
-
-        AT->>API: POST /v1/auth/login { email, password }
-        API-->>AT: { token } ← JWT now carries role:"attester"
-    end
-
-    rect rgb(255, 243, 220)
-        Note over OW,API: Phase 2 — Organization Setup
-
-        OW->>API: POST /v1/organizations { name:"Test University", role:"issuer" }
-        Note over API: Creates org with its own did:key (role=issuer)<br/>Owner auto-added as member with role "owner"
-        API-->>OW: { id:orgId, name, slug, did:orgDid, memberRole:"owner" }
-
-        Note over OW: Invite existing users by email — added directly as members
-        OW->>API: POST /v1/organizations/{orgId}/invites { email, role:"admin" }
-        API-->>OW: { userId, memberRole:"admin" }
-
-        Note over OW: Invite someone who hasn't signed up yet
-        OW->>API: POST /v1/organizations/{orgId}/invites { email:"newmember@example.com", role:"member" }
-        API-->>OW: { inviteToken, expiresAt } ← 72-hour token to share with invitee
-
-        SU->>API: POST /v1/organizations/invites/{inviteToken}/accept {}
-        Note over API: Verifies caller email matches invite email (BOLA protection)
-        API-->>SU: { success: true }
+        Note over API: Pre-flight checks
+        API->>DB: Verify issuer has ACTIVE trust attestation
+        API->>DB: Verify subjectDid exists and is active
     end
 
     rect rgb(220, 255, 230)
-        Note over AT,API: Phase 3 — Trust Setup (Attester authorises the Issuer)
-
-        Note over AT: Attester calls the trust endpoint using their personal issuer DID<br/>(the DID embedded in their JWT)
-        AT->>API: POST /v1/trust/attest { issuerDid: ownerDid }
-        Note over API: Records attestation VC linking attester → issuer<br/>Issuer is now in the trusted registry
-        API-->>AT: attestation record { id, issuerDid, attesterDid }
+        Note over API: SD-JWT VC construction (dc+sd-jwt)
+        API->>API: Generate ephemeral holder P-256 keypair
+        API->>API: For each claim → salt = randomBytes(16) → disclosure = [salt, key, value]
+        API->>API: _sd[i] = BASE64URL(SHA-256(JSON(disclosure_i)))
+        API->>API: Build JWT payload: { iss, sub, iat, exp, cnf:{jwk}, _sd, vct }
+        API->>API: Sign JWT header.payload with issuer P-256 key (ES256)
+        API->>API: sdJwt = header.payload.sig~disc1~disc2~...~
     end
 
-    rect rgb(220, 255, 240)
-        Note over OW,SU: Phase 4 — Credential Issuance
-
-        OW->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType:["UniversityDegree"], claims:{ name, degree, gpa } }
-        Note over API: ① verify Issuer has active trust attestation<br/>② sign all claims with BBS+ (DataIntegrityProof)<br/>③ persist VC with status = active
-        API-->>OW: signed Verifiable Credential { id:credId, proof, ... }
-
-        Note over OW,SU: Issuer shares credentialId with Subject out-of-band (QR code, secure message, etc.)
-        SU->>API: GET /v1/credentials/{credId}
-        API-->>SU: full VC record
+    rect rgb(255, 243, 220)
+        Note over API: mso_mdoc construction (ISO 18013-5)
+        API->>API: Build IssuerNameSpaces: { namespace: [[random, claimKey, claimValue], ...] }
+        API->>API: Build MSO: { docType, valueDigests, validityInfo }
+        API->>API: COSE_Sign1 = [protected, unprotected, MSO_CBOR, signature]
+        API->>API: Sign COSE_Sign1 with issuer P-256 key (ES256)
+        API->>API: mdoc = BASE64URL(CBOR(IssuerSigned))
     end
 
-    rect rgb(250, 225, 255)
-        Note over SU,VE: Phase 5 — Selective Disclosure & Verification
+    rect rgb(245, 220, 255)
+        Note over API: Token Status List assignment
+        API->>DB: SELECT NEXTVAL('credential_status_idx_seq') → statusListIndex
+        API->>DB: INSERT credentials (sdJwt, mdoc, holderKey, statusListId, statusListIndex)
+    end
 
-        Note over SU: Subject chooses which claims to reveal<br/>e.g. ["name","degree"] — GPA stays private
-        SU->>API: POST /v1/presentations/derive<br/>{ credentialId, revealedClaims:["name","degree"] }
-        Note over API: derive BBS+ proof over chosen subset only
-        API-->>SU: Verifiable Presentation (VP with ZK proof)
+    API-->>IS: { id, sdJwt, mdoc, holderKey: { privateKeyJwk }, proof }
 
-        Note over SU,VE: Subject sends VP to Verifier (off-API channel or direct share)
+    Note over IS,SU: Issuer delivers credentialId + sdJwt to Subject out-of-band
+    SU->>API: GET /v1/credentials/{id}
+    API-->>SU: Full credential record (issuer or subject only)
+```
 
-        VE->>API: POST /v1/presentations/verify { presentation: <VP> }
-        Note over API: ① verify BBS+ cryptographic proof<br/>② check Issuer is in trust registry<br/>③ check credential revocation/expiry status
-        API-->>VE: { valid:true, disclosedClaims:{ name, degree }, issuerTrusted:true, credentialStatus:"active" }
+**What the SD-JWT VC looks like internally:**
+
+```mermaid
+block-beta
+  columns 3
+
+  block:header["JWT Header"]:1
+    H["{ alg: ES256\n typ: dc+sd-jwt }"]
+  end
+
+  block:payload["JWT Payload"]:1
+    P["{ iss: did:key:zDnae...\n sub: did:key:zDnae...\n vct: UniversityDegree\n cnf: { jwk: holderPublicKey }\n _sd: [ hash1, hash2, hash3 ] }"]
+  end
+
+  block:sig["Issuer Signature"]:1
+    S["ES256\nP-256/SHA-256"]
+  end
+
+  block:discs["Selective Disclosures"]:3
+    D1["~[salt1, name, Alice Smith]~"]
+    D2["~[salt2, degree, BSc Computer Science]~"]
+    D3["~[salt3, gpa, 3.9]~"]
+  end
+
+  style header fill:#dce8ff,stroke:#4a90d9
+  style payload fill:#dcffe8,stroke:#27ae60
+  style sig fill:#fff3dc,stroke:#e6a817
+  style discs fill:#f5dcff,stroke:#8e44ad
+```
+
+---
+
+## Part 3 — Selective Disclosure & Verification
+
+### 3-A. Subject Derives a Selective-Disclosure Presentation
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor SU as 👤 Subject / Wallet
+    actor VE as 🔍 Verifier
+    participant API as DID + HAIP API
+
+    Note over SU: Credential: { name, degree, gpa, nationality }
+    Note over SU: Subject decides to reveal only: name + degree
+
+    SU->>API: POST /v1/presentations/derive<br/>{ credentialId, revealedClaims: ["name","degree"] }
+
+    rect rgb(220, 235, 255)
+        Note over API: SD-JWT selective filtering
+        API->>API: Parse full SD-JWT: issuerJwt~disc1~disc2~disc3~disc4~
+        API->>API: Filter — keep only disclosures matching revealedClaims
+        API->>API: partialSdJwt = issuerJwt~disc_name~disc_degree~
+        API->>API: Persist as presentation record
+    end
+
+    API-->>SU: { id, sdJwtPresentation, disclosedClaims }
+
+    SU->>VE: Share sdJwtPresentation (QR code, deep-link, direct channel)
+
+    VE->>API: POST /v1/presentations/verify { presentation }
+
+    rect rgb(220, 255, 230)
+        Note over API: 4-step verification pipeline
+        API->>API: ① Verify issuer ES256 signature on JWT header.payload
+        API->>API: ② For each disclosure: SHA-256(JSON([salt, key, val])) ∈ _sd array?
+        API->>API: ③ Check issuerDid in trust_attestations (active, non-expired)
+        API->>API: ④ Check credential status (active / revoked / expired)
+    end
+
+    API-->>VE: { valid: true, disclosedClaims: { name, degree },\n  issuerTrusted: true, credentialStatus: "active" }
+
+    Note over VE: ✅ Verifier learns ONLY name + degree.<br/>GPA and nationality remain hidden.
+```
+
+---
+
+## Part 4 — OID4VCI (Machine-to-Machine Issuance)
+
+For wallet-to-server issuance following the HAIP 1.0 authorization-code flow with **PAR + PKCE + DPoP**.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as 📱 Wallet / Client
+    participant AS as Authorization Server<br/>(DID + HAIP API)
+    participant CE as Credential Endpoint<br/>(/oauth/credentials)
+
+    rect rgb(220, 235, 255)
+        Note over W: Step 0 — Discover issuer capabilities
+        W->>AS: GET /.well-known/openid-credential-issuer
+        AS-->>W: { credential_endpoint, par_endpoint, token_endpoint,\n  credential_configurations_supported, dpop_signing_alg_values_supported: ["ES256"] }
+    end
+
+    rect rgb(255, 243, 220)
+        Note over W: Step 1 — Pushed Authorization Request (PAR)
+        W->>W: code_verifier = randomBytes(43-128 chars)
+        W->>W: code_challenge = BASE64URL(SHA-256(code_verifier))
+        W->>AS: POST /oauth/par<br/>{ response_type:code, client_id:walletDid,\n  redirect_uri, code_challenge, code_challenge_method:S256,\n  authorization_details:[{type, credential_configuration_id}] }
+        AS-->>W: { request_uri: "urn:ietf:params:oauth:request_uri:...", expires_in: 90 }
+    end
+
+    rect rgb(220, 255, 230)
+        Note over W: Step 2 — Authorization redirect
+        W->>AS: GET /oauth/authorize?request_uri=urn:...&client_id=walletDid
+        AS->>AS: Consume PAR → issue authorization code
+        AS-->>W: 302 → redirect_uri?code=AUTH_CODE&state=...
+    end
+
+    rect rgb(245, 220, 255)
+        Note over W: Step 3 — Token exchange with DPoP
+        W->>W: Build DPoP proof JWT:<br/>{ typ:"dpop+jwt", alg:"ES256",<br/>  jwk: walletPublicKey,<br/>  htm:"POST", htu:"…/oauth/token", iat }
+        W->>W: Sign DPoP proof with wallet P-256 key
+        W->>AS: POST /oauth/token<br/>{ grant_type:authorization_code, code, redirect_uri,\n  client_id, code_verifier }<br/>DPoP: <proof JWT>
+        AS->>AS: Verify DPoP proof (signature + htm/htu/iat)
+        AS->>AS: Verify PKCE: BASE64URL(SHA-256(code_verifier)) == code_challenge
+        AS-->>W: { access_token, token_type:"DPoP", expires_in:300,\n  c_nonce, c_nonce_expires_in }
+    end
+
+    rect rgb(255, 230, 220)
+        Note over W: Step 4 — Request credential with key proof
+        W->>W: Build key proof JWT:<br/>{ typ:"openid4vci-proof+jwt", alg:"ES256",<br/>  kid:walletDid, iss:walletDid,<br/>  aud:"http://localhost:3000",<br/>  iat, nonce: c_nonce }
+        W->>W: Sign key proof with wallet P-256 key
+        W->>W: Build fresh DPoP proof for /oauth/credentials
+        W->>CE: POST /oauth/credentials<br/>{ format:"vc+sd-jwt", proof:{ proof_type:"jwt", jwt: keyProof } }<br/>Authorization: DPoP <access_token><br/>DPoP: <proof JWT>
+        CE->>CE: Verify DPoP proof
+        CE->>CE: Verify key proof nonce == c_nonce
+        CE->>CE: Issue SD-JWT VC (or mso_mdoc)
+        CE-->>W: { format:"vc+sd-jwt", credential:"eyJ..." }
     end
 ```
 
 ---
 
-### Credential & Presentation State Machine
+## Part 5 — OID4VP (Verifier-Initiated Presentation)
+
+HAIP-compliant wallet presentation using **signed JAR request objects**, **direct_post**, and **KB-JWT holder binding**.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor VE as 🔍 Verifier App
+    participant API as DID + HAIP API
+    participant W as 📱 Wallet / Subject
+
+    rect rgb(220, 235, 255)
+        Note over VE: Step 1 — Verifier initiates a VP session
+        VE->>API: POST /oauth/vp/initiate<br/>{ dcqlQuery: { credentials: [{ format:"dc+sd-jwt",\n  meta:{vct_values:[...]}, claims:[{path:["name"]}] }] } }<br/>Authorization: Bearer <verifierToken>
+        API->>API: Create VP session, generate nonce
+        API-->>VE: { sessionId, requestUri:"http://…/oauth/request/{id}", nonce }
+    end
+
+    rect rgb(255, 243, 220)
+        Note over W: Step 2 — Wallet fetches signed request object
+        Note over VE,W: Verifier shares requestUri with wallet (QR code, deep-link)
+        W->>API: GET /oauth/request/{sessionId}
+        API->>API: Build JAR JWT:<br/>{ typ:"oauth-authz-req+jwt", alg:"ES256",\n  client_id:verifierDid, response_uri:"…/direct_post",\n  response_mode:"direct_post", nonce, dcql_query }
+        API->>API: Sign JAR with verifier P-256 key
+        API-->>W: Signed JAR JWT (application/oauth-authz-req+jwt)
+        W->>W: Verify JAR signature against verifier DID document
+    end
+
+    rect rgb(220, 255, 230)
+        Note over W: Step 3 — Wallet builds SD-JWT VP with KB-JWT
+
+        W->>W: Select matching credential (SD-JWT VC)
+        W->>W: Filter disclosures matching DCQL claims query
+        W->>W: partialSdJwt = issuerJwt~disc_name~ (trailing ~)
+        W->>W: sd_hash = BASE64URL(SHA-256(partialSdJwt))
+        W->>W: Build KB-JWT:<br/>{ typ:"kb+jwt", alg:"ES256",\n  nonce (from JAR), aud:verifierDid,\n  iat, sd_hash }
+        W->>W: Sign KB-JWT with holder P-256 key (matches cnf.jwk)
+        W->>W: vpToken = issuerJwt~disc_name~kbJwt
+    end
+
+    rect rgb(245, 220, 255)
+        Note over W: Step 4 — Submit VP via direct_post
+        W->>API: POST /oauth/direct_post<br/>{ vp_token: vpToken, presentation_submission: {...} }
+
+        rect rgb(255, 240, 220)
+            Note over API: Verification pipeline
+            API->>API: ① Decode issuer JWT + disclosures
+            API->>API: ② Verify issuer ES256 signature
+            API->>API: ③ Verify disclosure hashes ∈ _sd array
+            API->>API: ④ Verify KB-JWT signature with cnf.jwk
+            API->>API: ⑤ KB-JWT nonce == session nonce (replay prevention)
+            API->>API: ⑥ KB-JWT sd_hash == SHA-256(partialSdJwt)
+            API->>API: ⑦ Check trust registry (issuerDid)
+            API->>API: ⑧ Check Token Status List (not revoked)
+        end
+
+        API->>API: Update VP session state → verified / failed
+        API-->>W: { redirect_uri: "https://verifier.example.com/result?session=..." }
+    end
+
+    rect rgb(220, 255, 255)
+        Note over VE: Step 5 — Verifier polls for result
+        VE->>API: GET /oauth/vp-result/{sessionId}
+        API-->>VE: { state:"verified",\n  disclosedClaims:{ name:"Alice Smith" },\n  verifiedAt }
+    end
+```
+
+---
+
+## Part 6 — KB-JWT Anatomy (Holder Binding)
+
+The Key Binding JWT is what proves the person presenting the credential actually holds the private key corresponding to `cnf.jwk` in the issued credential.
+
+```mermaid
+flowchart TB
+    subgraph Issued["Issued SD-JWT VC (stored by wallet)"]
+        direction LR
+        IJwt["issuerJwt\n(ES256 · P-256)\n─────────────\ncnf.jwk = holderPubKey\n_sd = [hash1, hash2, hash3]"]
+        D1["~[salt1, name, Alice]~"]
+        D2["~[salt2, degree, BSc]~"]
+        D3["~[salt3, gpa, 3.9]~"]
+    end
+
+    subgraph Presentation["VP Token (sent to verifier)"]
+        direction LR
+        PJwt["issuerJwt"]
+        PD1["~[salt1, name, Alice]~"]
+        KB["kbJwt\n(ES256 · holderKey)\n─────────────\nnonce: session nonce\naud: verifierDid\nsd_hash: SHA-256(issuerJwt~disc1~)\niat: now"]
+    end
+
+    subgraph Checks["Verifier Checks"]
+        C1["✅ issuerJwt signature\n(issuer P-256 key)"]
+        C2["✅ disc_name hash ∈ _sd"]
+        C3["✅ kbJwt signature\n(holderKey = cnf.jwk)"]
+        C4["✅ nonce matches session"]
+        C5["✅ sd_hash matches content"]
+    end
+
+    IJwt -->|"reveal name only\n(drop disc2, disc3)"| PJwt
+    D1 --> PD1
+    PJwt & PD1 -->|"sd_hash = SHA-256(ijwt~disc1~)"| KB
+    PJwt --> C1
+    PD1 --> C2
+    KB --> C3 & C4 & C5
+
+    style Issued fill:#dcffe8,stroke:#27ae60
+    style Presentation fill:#f5dcff,stroke:#8e44ad
+    style Checks fill:#fff3dc,stroke:#e6a817
+```
+
+---
+
+## Part 7 — Revocation via Token Status List
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor IS as 🏛️ Issuer
+    actor VE as 🔍 Verifier
+    participant API as DID + HAIP API
+    participant DB as PostgreSQL
+
+    Note over IS: Issuer decides to revoke a credential
+    IS->>API: POST /v1/credentials/{id}/revoke<br/>Authorization: Bearer <issuerToken>
+
+    API->>DB: UPDATE credentials SET status='revoked' WHERE id=?
+    API->>DB: Note: statusListId + statusListIndex already assigned at issuance
+
+    Note over API: Next status list fetch will show bit=1 at this index
+
+    VE->>API: GET /v1/credentials/status-lists/{statusListId}
+
+    rect rgb(220, 255, 230)
+        Note over API: Build Token Status List JWT
+        API->>DB: SELECT all credentials WHERE status_list_id = ?
+        API->>API: Build bitset: bit[statusListIndex] = 1 if revoked else 0
+        API->>API: DEFLATE-compress bitset
+        API->>API: Build JWT { typ:"statuslist+jwt",\n  status_list: { bits:1, lst: BASE64URL(compressed) } }
+        API->>API: Sign JWT with issuer P-256 key (ES256)
+    end
+
+    API-->>VE: Signed Status List JWT (application/statuslist+jwt)
+
+    VE->>VE: Verify JWT signature
+    VE->>VE: Decompress bitset
+    VE->>VE: Check bit at credential's statusListIndex
+    VE->>VE: bit == 1 → REVOKED ❌
+```
+
+---
+
+## Full End-to-End Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor AD as 🛡️ Admin
+    actor AT as 🔐 Attester
+    actor IS as 🏛️ Issuer
+    actor SU as 👤 Subject
+    actor VE as 🔍 Verifier
+    participant API as DID + HAIP API
+
+    rect rgb(220, 235, 255)
+        Note over AD,API: Phase 1 — Account & Role Setup
+        IS->>API: POST /v1/auth/signup { email, password, name }
+        API-->>IS: { token, user: { did:"did:key:zDnae...", role:"subject" } }
+        AT->>API: POST /v1/auth/signup { email, password, name }
+        API-->>AT: { token, user: { did, role:"subject" } }
+        SU->>API: POST /v1/auth/signup { email, password, name }
+        API-->>SU: { token, user: { did, role:"subject" } }
+        VE->>API: POST /v1/auth/signup { email, password, name }
+        API-->>VE: { token, user: { did, role:"subject" } }
+
+        AD->>API: POST /v1/admin/users/{isId}/role { role:"issuer" }
+        AD->>API: POST /v1/admin/users/{atId}/role { role:"attester" }
+        AD->>API: POST /v1/admin/users/{veId}/role { role:"verifier" }
+
+        IS->>API: POST /v1/auth/login → fresh JWT (role:"issuer")
+        AT->>API: POST /v1/auth/login → fresh JWT (role:"attester")
+    end
+
+    rect rgb(220, 255, 230)
+        Note over AT,API: Phase 2 — Trust Setup
+        AT->>API: POST /v1/trust/attest { issuerDid }
+        API-->>AT: { id, issuerDid, attesterDid } — issuer now in trust registry
+    end
+
+    rect rgb(255, 243, 220)
+        Note over IS,SU: Phase 3 — Credential Issuance
+        IS->>API: POST /v1/credentials/issue<br/>{ subjectDid, credentialType:["UniversityDegree"],\n  claims:{ name, degree, gpa } }
+        Note over API: ① Trust check ② SD-JWT VC (ES256) ③ mso_mdoc (COSE_Sign1)<br/>④ Ephemeral holder key ⑤ Token Status List index assigned
+        API-->>IS: { id:credId, sdJwt, mdoc, holderKey }
+        IS->>SU: Share credId out-of-band (QR code, secure message)
+        SU->>API: GET /v1/credentials/{credId}
+        API-->>SU: SD-JWT VC + mso_mdoc record
+    end
+
+    rect rgb(245, 220, 255)
+        Note over SU,VE: Phase 4 — Selective Disclosure (REST path)
+        SU->>API: POST /v1/presentations/derive<br/>{ credentialId:credId, revealedClaims:["name","degree"] }
+        Note over API: Filter disclosures — GPA stays hidden
+        API-->>SU: { sdJwtPresentation: "eyJ...~disc_name~disc_degree~" }
+
+        SU->>VE: Send sdJwtPresentation
+        VE->>API: POST /v1/presentations/verify { presentation }
+        Note over API: ① ES256 sig ② disclosure hashes ③ trust check ④ status list
+        API-->>VE: { valid:true, disclosedClaims:{ name, degree },\n  issuerTrusted:true, credentialStatus:"active" }
+    end
+```
+
+---
+
+## Credential & Presentation State Machine
 
 ```mermaid
 stateDiagram-v2
-    direction TB
+    direction LR
+
     [*] --> Account_Created : POST /v1/auth/signup
-    state "Account Created<br>(role: subject)" as Account_Created
-    state "Role Upgraded<br>(issuer / attester / verifier)" as Role_Upgraded
-    state "Org Created<br>(org DID: issuer)" as Org_Created
-    state "Issuer Trusted" as Issuer_Trusted
-    state "VC Active" as VC_Active
-    state "VP Derived" as VP_Derived
 
-    Account_Created --> Role_Upgraded : POST /v1/admin/users/{id}/role<br>(requires X-Admin-Secret)
-    Account_Created --> Org_Created : POST /v1/organizations<br>(any authenticated user)
-    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest<br>(attester vouches for issuer DID)
-    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue<br>(issuer + active attestation)
+    state "Account\n(role: subject)" as Account_Created
+    state "Role Upgraded\n(issuer / attester / verifier)" as Role_Upgraded
+    state "Issuer Trusted\n(active attestation)" as Issuer_Trusted
+    state "Credential Issued\n(SD-JWT VC + mso_mdoc)" as VC_Active
+    state "Presentation Derived\n(selective SD-JWT)" as VP_Derived
+    state "Presentation Verified ✅" as VP_OK
+    state "Presentation Failed ❌" as VP_FAIL
+    state "Revoked" as VC_Revoked
+    state "Expired" as VC_Expired
 
-    VC_Active --> VP_Derived : POST /v1/presentations/derive<br>(subject · choose claims to reveal)
-    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke<br>(issuer only · irreversible)
-    VC_Active --> VC_Expired : expiresAt timestamp reached
+    Account_Created --> Role_Upgraded : POST /v1/admin/users/{id}/role
+    Role_Upgraded --> Issuer_Trusted : POST /v1/trust/attest\n(attester vouches for issuer)
+    Issuer_Trusted --> VC_Active : POST /v1/credentials/issue\n(ES256 SD-JWT + COSE_Sign1 mdoc)
 
-    VP_Derived --> VP_Verified_OK : POST /v1/presentations/verify<br>✅ proof valid · issuer trusted · VC active
-    VP_Derived --> VP_Verified_FAIL : POST /v1/presentations/verify<br>❌ invalid proof OR issuer untrusted OR VC revoked/expired
+    VC_Active --> VP_Derived : POST /v1/presentations/derive\n(subject · choose revealedClaims)
+    VC_Active --> VC_Revoked : POST /v1/credentials/{id}/revoke\n(issuer · bit flipped in Status List)
+    VC_Active --> VC_Expired : expiresAt reached
+
+    VP_Derived --> VP_OK : POST /v1/presentations/verify\n✅ sig · hashes · trust · status
+    VP_Derived --> VP_FAIL : POST /v1/presentations/verify\n❌ invalid sig OR revoked OR untrusted
 
     VC_Revoked --> [*]
     VC_Expired --> [*]
 ```
-
----
-
-### Trust Model at a Glance
-
-```mermaid
-flowchart TD
-    subgraph Accounts["👥 Account Layer (v1.2)"]
-        AT_ACC(["🔐 Attester Account<br>email + password"])
-        IS_ACC(["🏛️ Issuer Account<br>email + password"])
-        SU_ACC(["👤 Subject Account<br>email + password"])
-        VE_ACC(["🔍 Verifier Account<br>email + password"])
-        ORG(["🏢 Organization<br>orgDid (issuer role)"])
-    end
-
-    subgraph Protocol["🔗 DID Protocol Layer"]
-        TR[("Trust Registry<br>trust_attestations")]
-        VC["BBS+ Verifiable<br>Credential"]
-        VP["Verifiable Presentation<br>(selective disclosure)"]
-        RES{{"Verification<br>Result"}}
-    end
-
-    IS_ACC -->|"owns / member of"| ORG
-    AT_ACC -->|"POST /v1/trust/attest<br>grant attestation"| TR
-    TR -->|"authorises issuance"| IS_ACC
-    IS_ACC -->|"POST /v1/credentials/issue<br>sign with BBS+"| VC
-    VC -->|"issued to"| SU_ACC
-    SU_ACC -->|"POST /v1/presentations/derive<br>reveal chosen claims only"| VP
-    VP -->|"shared with"| VE_ACC
-    VE_ACC -->|"POST /v1/presentations/verify"| RES
-    TR -.->|"trust check"| RES
-    VC -.->|"revocation check"| RES
-
-    style AT_ACC fill:#dce8ff,stroke:#4a90d9
-    style IS_ACC fill:#dce8ff,stroke:#4a90d9
-    style SU_ACC fill:#dce8ff,stroke:#4a90d9
-    style VE_ACC fill:#dce8ff,stroke:#4a90d9
-    style ORG fill:#fff3dc,stroke:#e6a817
-    style TR fill:#fff3dc,stroke:#e6a817
-    style VC fill:#dcffe8,stroke:#27ae60
-    style VP fill:#f5dcff,stroke:#8e44ad
-    style RES fill:#f0f0f0,stroke:#555
-```
-
-> **Privacy guarantee:** The Verifier only ever sees the claims the Subject explicitly included in `revealedClaims`. All other claims in the original credential are cryptographically hidden — the BBS+ proof is mathematically indistinguishable from a proof over the full credential.
 
 ---
 
@@ -237,231 +658,177 @@ flowchart TD
 did-zkp/
 ├── src/
 │   ├── domains/
-│   │   ├── auth/           # DID challenge/response, JWT sessions, login
-│   │   ├── users/          # Email/password accounts, profile, password reset, admin role upgrade
+│   │   ├── auth/           # DID challenge/response + JWT sessions
+│   │   ├── users/          # Email/password accounts, profile, password reset, admin
 │   │   ├── organizations/  # Org management, member roles, invites
-│   │   ├── did/            # DID document management
-│   │   ├── credentials/    # VC issuance, revocation, status
-│   │   ├── presentation/   # BBS+ selective disclosure, VP verification
-│   │   └── trust/          # Attester trust registry
+│   │   ├── did/            # did:key creation and resolution (P-256)
+│   │   ├── credentials/    # SD-JWT VC + mso_mdoc issuance, revocation, Token Status List
+│   │   ├── presentation/   # SD-JWT selective disclosure + VP verification
+│   │   ├── trust/          # Attester trust registry
+│   │   └── oauth/          # OID4VCI (PAR · authorize · token · credentials)
+│   │                       # OID4VP (vp/initiate · request · direct_post · vp-result)
 │   ├── shared/
-│   │   ├── crypto/         # AES-GCM key encryption, did:key, BBS+ wrappers
-│   │   ├── jsonld/         # Offline JSON-LD context loader (no external HTTP)
+│   │   ├── crypto/
+│   │   │   ├── p256.ts     # P-256 key generation, did:key multicodec encoding
+│   │   │   ├── sd-jwt.ts   # SD-JWT VC issuance, selective disclosure, KB-JWT verification
+│   │   │   ├── mdoc.ts     # ISO 18013-5 IssuerSigned builder + COSE_Sign1
+│   │   │   ├── did-key.ts  # did:key document builder (Multikey / P-256)
+│   │   │   └── keys.ts     # AES-GCM key encryption
 │   │   └── middleware/     # Rate limiting, security headers, CORS
 │   └── index.ts
 ├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── security/
-└── docs/
-    └── superpowers/
-        ├── specs/          # Design specification
-        └── plans/          # Implementation plan
+│   ├── unit/crypto/        # sd-jwt, mdoc, p256 unit tests
+│   ├── integration/        # Full lifecycle + revocation + trust
+│   └── security/           # OWASP API Top 10 tests
+├── migrations/
+│   ├── 001–005_*.sql       # Base schema
+│   ├── 006_haip_p1.sql     # P-256, SD-JWT columns, status list sequence
+│   ├── 007_haip_p2.sql     # OID4VCI tables (PAR, auth codes, DPoP nonces)
+│   └── 008_haip_p3.sql     # OID4VP table (VP sessions)
+└── docs/superpowers/
+    ├── specs/              # HAIP migration design spec
+    └── plans/              # 13-task TDD implementation plan
 ```
-
-**Pattern:** Domain-Driven Modular — each domain owns its routes, service, and repository. Shared crypto and middleware are injected via explicit imports.
 
 ---
 
 ## Tech Stack
 
-| Concern | Library |
+| Concern | Library / API |
 |---|---|
 | HTTP Framework | [Hono](https://hono.dev) (Bun-native) |
-| BBS+ Signing / Verification | `@digitalbazaar/bbs-cryptosuite-2023` |
-| JSON-LD Processing | `jsonld` (offline, no external HTTP) |
-| `did:key` Resolution | `@digitalbazaar/did-method-key` |
-| DataIntegrity Proofs | `@digitalbazaar/data-integrity` |
-| Verifiable Credentials | `@digitalbazaar/vc` |
+| Cryptography | **Web Crypto API** (built into Bun) — P-256 keygen, ECDSA sign/verify, SHA-256 |
+| CBOR encode/decode | `cbor2` — for mso_mdoc / COSE_Sign1 |
+| JWT / JWK | `jose` — import/export JWK, JWT sign/verify |
 | Database | PostgreSQL via `postgres` npm |
 | Input Validation | `zod` |
-| Session Tokens | `jose` (JWT, 15-min TTL) |
-| Key Encryption | AES-GCM (Web Crypto API, built into Bun) |
+| Session Tokens | `jose` (JWT HS256, 15-min TTL) |
+| Key Encryption | AES-GCM (Web Crypto API) |
 | Password Hashing | Bun built-in Argon2id (OWASP params) |
+
+> **No external crypto libraries** — BLS12-381, `@digitalbazaar/*`, `jsonld`, and `@mattrglobal/bbs-signatures` have all been removed. All operations use the P-256 primitives available natively in the Bun/Web Crypto API.
 
 ---
 
 ## API Endpoints
 
-All endpoints are prefixed with `/v1`. Protected routes require `Authorization: Bearer <token>`.
+All v1 endpoints are prefixed `/v1`. Protected routes require `Authorization: Bearer <token>`.
 
-### Email Auth (v1.2)
+### Email Auth
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/v1/auth/signup` | Public | Create account; auto-generates a `did:key` |
+| `POST` | `/v1/auth/signup` | Public | Create account; P-256 `did:key` auto-generated |
 | `POST` | `/v1/auth/login` | Public | Exchange email + password for JWT |
-| `POST` | `/v1/auth/forgot-password` | Public | Request a password reset token |
+| `POST` | `/v1/auth/forgot-password` | Public | Request password reset token |
 | `POST` | `/v1/auth/reset-password` | Public | Consume reset token, set new password |
 
-### Users (v1.2)
+### DID Authentication (challenge-response)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/v1/users/me` | Any role | Get your profile (includes org memberships) |
-| `PATCH` | `/v1/users/me` | Any role | Update name or organizationName |
-
-### Admin (v1.2)
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/v1/admin/users/:id/role` | `X-Admin-Secret` header | Upgrade a user's DID role |
-
-### Organizations (v1.2)
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/v1/organizations` | Any role | Create an org with its own DID |
-| `GET` | `/v1/organizations/:id` | Member | Get org details |
-| `DELETE` | `/v1/organizations/:id` | Owner | Delete org and deactivate its DID |
-| `GET` | `/v1/organizations/:id/members` | Member | List all org members |
-| `POST` | `/v1/organizations/:id/invites` | Admin/Owner | Invite a user by email |
-| `POST` | `/v1/organizations/invites/:token/accept` | Any role | Accept a pending invite |
-| `PATCH` | `/v1/organizations/:id/members/:userId` | Admin/Owner | Change a member's org role |
-| `DELETE` | `/v1/organizations/:id/members/:userId` | Admin/Owner or self | Remove a member (or leave) |
-
-### DID Authentication (challenge-response path)
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/v1/auth/challenge` | Public | Request a one-time nonce for a DID |
-| `POST` | `/v1/auth/verify` | Public | Submit signed nonce, receive JWT |
+| `POST` | `/v1/auth/challenge` | Public | Request one-time nonce for a DID |
+| `POST` | `/v1/auth/verify` | Public | Submit P-256 ECDSA signature, receive JWT |
 
 ### DID Management
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/v1/dids` | Public | Create a raw `did:key` (private key returned **once**) |
+| `POST` | `/v1/dids` | Public | Generate P-256 `did:key` (private JWK returned **once**) |
 | `GET` | `/v1/dids/me` | Any role | Get your own DID document |
 | `GET` | `/v1/dids/:did` | Public | Resolve any DID document |
 | `DELETE` | `/v1/dids/:did` | Owner | Deactivate a DID |
 
+### Users
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/v1/users/me` | Any role | Get profile (includes org memberships) |
+| `PATCH` | `/v1/users/me` | Any role | Update name or organizationName |
+
+### Admin
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/v1/admin/users/:id/role` | `X-Admin-Secret` | Upgrade user's DID role |
+
+### Organizations
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/v1/organizations` | Any role | Create org with its own P-256 DID |
+| `GET` | `/v1/organizations/:id` | Member | Get org details |
+| `DELETE` | `/v1/organizations/:id` | Owner | Delete org and deactivate its DID |
+| `GET` | `/v1/organizations/:id/members` | Member | List members |
+| `POST` | `/v1/organizations/:id/invites` | Admin/Owner | Invite user by email |
+| `POST` | `/v1/organizations/invites/:token/accept` | Any role | Accept pending invite |
+| `PATCH` | `/v1/organizations/:id/members/:userId` | Admin/Owner | Change member's org role |
+| `DELETE` | `/v1/organizations/:id/members/:userId` | Admin/Owner or self | Remove member |
+
 ### Verifiable Credentials
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/v1/credentials/issue` | Issuer | Issue a BBS+-signed VC to a subject |
-| `GET` | `/v1/credentials` | Issuer | List all issued VCs |
-| `GET` | `/v1/credentials/:id` | Issuer / Subject | Fetch a VC by ID |
-| `POST` | `/v1/credentials/:id/revoke` | Issuer | Revoke a credential |
+| `POST` | `/v1/credentials/issue` | Issuer | Issue SD-JWT VC + mso_mdoc to subject |
+| `GET` | `/v1/credentials` | Issuer | List all issued credentials |
+| `GET` | `/v1/credentials/:id` | Issuer / Subject | Fetch credential by ID |
+| `POST` | `/v1/credentials/:id/revoke` | Issuer | Revoke credential (updates Token Status List) |
 | `GET` | `/v1/credentials/:id/status` | Public | Check credential status |
+| `GET` | `/v1/credentials/status-lists/:id` | Public | Token Status List 1.0 JWT |
 
 ### Verifiable Presentations
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/v1/presentations/derive` | Subject | Create a VP with BBS+ selective disclosure |
-| `POST` | `/v1/presentations/verify` | Verifier | Verify a VP (proof + trust chain + revocation) |
-| `GET` | `/v1/presentations/:id` | Subject | Fetch a previously derived presentation |
+| `POST` | `/v1/presentations/derive` | Subject | Derive SD-JWT selective-disclosure VP |
+| `POST` | `/v1/presentations/verify` | Verifier | Verify VP (sig + hashes + trust + revocation) |
+| `GET` | `/v1/presentations/:id` | Subject | Fetch previously derived presentation |
 
 ### Trust Registry
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/v1/trust/attest` | Attester | Vouch for an issuer DID |
 | `GET` | `/v1/trust/issuers` | Public | List all trusted issuers |
-| `GET` | `/v1/trust/issuers/:did` | Public | Check if a DID is a trusted issuer |
+| `GET` | `/v1/trust/issuers/:did` | Public | Check if DID is a trusted issuer |
 | `POST` | `/v1/trust/attest/:id/revoke` | Attester | Revoke an issuer attestation |
 
----
+### OID4VCI (HAIP authorization-code flow)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/.well-known/openid-credential-issuer` | Public | OID4VCI issuer metadata |
+| `POST` | `/oauth/par` | Public | Pushed Authorization Request (PAR + PKCE) |
+| `GET` | `/oauth/authorize` | Public | Authorization code redirect |
+| `POST` | `/oauth/token` | DPoP | Token endpoint (DPoP-bound access token + c_nonce) |
+| `POST` | `/oauth/nonce` | DPoP | Refresh c_nonce |
+| `POST` | `/oauth/credentials` | DPoP | Credential endpoint (key proof JWT required) |
 
-## Core Flows
-
-### 1. Account Setup & Role Assignment
-
-```bash
-# Create an account (did:key auto-generated, initial role = subject)
-POST /v1/auth/signup
-{ "email": "issuer@example.com", "password": "password123", "name": "Alice" }
-→ { token, user: { id, did, role: "subject" } }
-
-# Admin upgrades role (requires X-Admin-Secret header)
-POST /v1/admin/users/<USER_ID>/role
-{ "role": "issuer" }
-→ { success: true }
-
-# Log in again — JWT now carries role: "issuer"
-POST /v1/auth/login
-{ "email": "issuer@example.com", "password": "password123" }
-→ { token }
-```
-
-### 2. Organization Setup
-
-```bash
-# Create an org with an institutional DID
-POST /v1/organizations
-{ "name": "Test University", "role": "issuer" }
-→ { id, slug: "test-university", did: "did:key:z6Mk...", memberRole: "owner" }
-
-# Invite an existing user to join the org (adds them immediately)
-POST /v1/organizations/<ORG_ID>/invites
-{ "email": "colleague@example.com", "role": "admin" }
-→ { userId, memberRole: "admin" }
-
-# Invite a new user (returns a token to share with them)
-POST /v1/organizations/<ORG_ID>/invites
-{ "email": "newperson@example.com", "role": "member" }
-→ { inviteToken, expiresAt }
-
-# New user accepts the invite after signing up
-POST /v1/organizations/invites/<INVITE_TOKEN>/accept  {}
-→ { success: true }
-```
-
-### 3. Trust Setup
-
-```bash
-# Attester authorizes the issuer (must use attester JWT)
-POST /v1/trust/attest
-{ "issuerDid": "did:key:z6Mk..." }
-→ { id, issuerDid, attesterDid, createdAt }
-```
-
-### 4. Issuing a Verifiable Credential
-
-```bash
-# Issuer signs a VC with BBS+ (DataIntegrityProof)
-POST /v1/credentials/issue
-{
-  "subjectDid": "did:key:...",
-  "credentialType": ["UniversityDegree"],
-  "claims": { "name": "Alice", "degree": "BSc Computer Science", "gpa": "3.9" }
-}
-→ signed VC with DataIntegrityProof  { id, proof, ... }
-```
-
-### 5. Selective Disclosure Presentation
-
-```bash
-# Subject reveals only name and degree — GPA stays hidden
-POST /v1/presentations/derive
-{ "credentialId": "urn:uuid:...", "revealedClaims": ["name", "degree"] }
-→ VP with BBS+ derived proof
-
-# Verifier checks the proof, trust chain, and revocation status
-POST /v1/presentations/verify  { "presentation": <VP> }
-→ { valid: true, disclosedClaims: { name, degree }, issuerTrusted: true, credentialStatus: "active" }
-```
+### OID4VP (HAIP verifier-initiated flow)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/oauth/vp/initiate` | Verifier | Start VP session (DCQL query) |
+| `GET` | `/oauth/request/:id` | Public | Fetch signed JAR request object |
+| `POST` | `/oauth/direct_post` | Public | Submit VP token (SD-JWT + KB-JWT) |
+| `GET` | `/oauth/vp-result/:id` | Verifier | Poll VP verification result |
 
 ---
 
 ## Security
 
-### OWASP API Security Top 10 Controls
+### OWASP API Security Top 10
 
 | # | Threat | Control |
 |---|---|---|
-| API1 | Broken Object Level Authorization | Resource ownership enforced — callers can only access their own resources; org BOLA: invite email must match caller email |
-| API2 | Broken Authentication | Single-use nonces (5-min TTL); short-lived JWTs (15-min); Argon2id passwords; timing-safe dummy hash on unknown-email login |
+| API1 | Broken Object Level Authorization | Ownership enforced per resource; org invite BOLA: caller email must match invite email |
+| API2 | Broken Authentication | Single-use nonces (5-min TTL); P-256 ECDSA sig verification; short-lived JWTs (15-min); Argon2id passwords; timing-safe comparison; DPoP proof anti-replay |
 | API3 | Broken Object Property Level Authorization | Response serializers strip fields by role |
-| API4 | Unrestricted Resource Consumption | Rate limiting: 100 req/min general, 10 req/min on sensitive endpoints; 64KB body cap |
-| API5 | Broken Function Level Authorization | Role checked at middleware level before any handler; org role hierarchy (member < admin < owner) enforced per operation |
-| API6 | Unsafe Business Flows | Issuance requires role + active trust attestation; last-owner removal blocked |
-| API7 | SSRF | All JSON-LD contexts cached locally — zero outbound HTTP during request handling |
-| API8 | Security Misconfiguration | CSP, HSTS, X-Frame-Options, X-Content-Type-Options on every response |
-| API9 | Improper Inventory Management | All endpoints versioned under `/v1/` |
-| API10 | Unsafe Input Consumption | Zod schemas on all inputs; JSON-LD `@context` allowlist |
+| API4 | Unrestricted Resource Consumption | Rate limiting: 100 req/min general, 10 req/min on issuance; 64 KB body cap |
+| API5 | Broken Function Level Authorization | Role checked at middleware before any handler; org role hierarchy (member < admin < owner) enforced per operation |
+| API6 | Unsafe Business Flows | Issuance requires role + active trust attestation; last-owner removal blocked; KB-JWT nonce binding prevents VP replay |
+| API7 | SSRF | Zero outbound HTTP during request handling (no JSON-LD, no external resolvers) |
+| API8 | Security Misconfiguration | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Cache-Control: no-store on every response |
+| API9 | Improper Inventory Management | All endpoints versioned under `/v1/` or `/oauth/` |
+| API10 | Unsafe Input Consumption | Zod schemas on all inputs; DPoP htm/htu/iat validation |
 
-### Additional Privacy Controls
+### Privacy Controls
 
-- BBS+ selective disclosure — verifiers receive **only** the claims the subject chose to reveal
-- Private keys stored AES-GCM encrypted; decrypted in-memory only during signing
-- Private key returned only once at DID creation and never again
-- Timing-safe Argon2id comparison on login — unknown-email and wrong-password return identical error and timing
-- Append-only `audit_log` table records every issuance, revocation, verification, and auth event — claim values are never logged
-- Password reset sessions invalidated immediately after a successful reset
+- **SD-JWT selective disclosure** — verifiers receive *only* the claims the subject chose to reveal; all other claims are cryptographically hidden
+- **Holder binding via KB-JWT** — proves the presenter holds the private key matching `cnf.jwk`; prevents credential theft attacks
+- **DPoP (RFC 9449)** — access tokens are key-bound; stolen tokens cannot be replayed from a different client
+- **Private keys never stored** — raw private keys returned only once at creation; server stores AES-GCM encrypted form, decrypts only during signing
+- **Append-only audit log** — every issuance, revocation, verification, and auth event recorded; claim values never logged
+- **Password reset** — all active sessions invalidated on successful reset
 
 ---
 
@@ -482,7 +849,7 @@ bun install
 
 # Configure environment
 cp .env.example .env
-# Edit .env — generate values for the required secrets:
+# Generate secrets:
 openssl rand -hex 32    # → KEY_ENCRYPTION_SECRET
 openssl rand -base64 32 # → JWT_SECRET
 openssl rand -hex 32    # → ADMIN_SECRET
@@ -490,7 +857,7 @@ openssl rand -hex 32    # → ADMIN_SECRET
 # Create the database
 createdb did_zkp
 
-# Start the server (runs migrations automatically on startup)
+# Start the server (runs all migrations automatically)
 bun run dev
 ```
 
@@ -499,46 +866,24 @@ bun run dev
 ```bash
 curl http://localhost:3000/health
 # → {"status":"ok"}
+
+# Discover OID4VCI capabilities
+curl http://localhost:3000/.well-known/openid-credential-issuer
 ```
 
 ### Interactive API Docs
 
-Open [http://localhost:3000/docs](http://localhost:3000/docs) for the Scalar UI with all endpoints, schemas, and try-it-out support.
+Open [http://localhost:3000/docs](http://localhost:3000/docs) for the Scalar UI — all 44 endpoints with schemas, examples, and try-it-out.
 
 ### Running Tests
 
 ```bash
-# Create test database
 createdb did_zkp_test
 
-# Unit tests
-bun test:unit
-
-# Integration tests
-bun test:integration
-
-# Security (OWASP) tests
-bun test:security
-
-# All tests
-bun test
-```
-
----
-
-## CLI Utilities
-
-### Signature Generator
-
-For local development and testing, use the built-in CLI signature generator to create signatures for the DID challenge-response authentication. It retrieves the required nonce and private key from your local database, signs the challenge, and outputs the base64-encoded signature:
-
-```bash
-bun run generate-signature.ts <did> <challengeId>
-```
-
-Example:
-```bash
-bun run generate-signature.ts "did:key:z6MknwjrNSCBRBYdCgSXPHFQXNyisvEWM3SuVYnT6d215XUC" "af003fcc-5012-42f9-b508-4f7e4d88236a"
+bun test:unit         # Crypto unit tests (SD-JWT, mso_mdoc, P-256)
+bun test:integration  # Full lifecycle + revocation + trust flows
+bun test:security     # OWASP API Top 10 security tests
+bun test              # All tests
 ```
 
 ---
@@ -549,7 +894,7 @@ bun run generate-signature.ts "did:key:z6MknwjrNSCBRBYdCgSXPHFQXNyisvEWM3SuVYnT6
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `TEST_DATABASE_URL` | Tests | PostgreSQL connection string for test DB |
-| `KEY_ENCRYPTION_SECRET` | Yes | 64-char hex string (32 bytes) for AES-GCM key encryption |
+| `KEY_ENCRYPTION_SECRET` | Yes | 64-char hex (32 bytes) for AES-GCM private key encryption |
 | `JWT_SECRET` | Yes | Secret for signing session JWTs |
 | `ADMIN_SECRET` | Yes | Secret for `X-Admin-Secret` header on admin endpoints |
 | `CORS_ORIGIN` | No | Allowed CORS origin (default: `http://localhost:3000`) |
@@ -560,41 +905,44 @@ bun run generate-signature.ts "did:key:z6MknwjrNSCBRBYdCgSXPHFQXNyisvEWM3SuVYnT6
 
 ## Database Schema
 
-Eleven tables cover the full protocol lifecycle:
-
 ### Account & Identity
-- **`users`** — email/password accounts, name, organizationName, FK → dids
-- **`password_reset_tokens`** — one-time reset tokens with expiry and used flag
-- **`dids`** — DID documents, Ed25519 + BLS12-381 encrypted key pairs, role
+- **`users`** — email/password accounts, name, FK → dids
+- **`password_reset_tokens`** — one-time reset tokens with expiry
+- **`dids`** — DID documents, P-256 public key JWK, AES-GCM encrypted private key, role
 - **`sessions`** — JWT session records (15-min TTL)
-- **`auth_challenges`** — single-use nonces for DID Auth (5-min TTL)
+- **`auth_challenges`** — single-use nonces for DID challenge-response (5-min TTL)
 
 ### Organizations
 - **`organizations`** — org name, slug, DID, owner FK
-- **`org_members`** — user ↔ org membership with role (`member`, `admin`, `owner`)
-- **`org_invites`** — pending invites with email, token, expiry, and accepted flag
+- **`org_members`** — user ↔ org membership with role
+- **`org_invites`** — pending invites with email, token, expiry
 
 ### Credentials & Trust
-- **`credentials`** — signed VCs with BBS+ DataIntegrityProof
-- **`presentations`** — derived VPs with selective-disclosure proofs
-- **`trust_attestations`** — attestation VCs linking attesters to authorized issuers
-- **`audit_log`** — append-only event log (UPDATE/DELETE blocked by DB trigger)
+- **`credentials`** — SD-JWT VC, mso_mdoc, holder key, Token Status List position, status
+- **`presentations`** — derived SD-JWT VPs (issuer JWT + selected disclosures)
+- **`trust_attestations`** — attestation records linking attesters to authorized issuers
+- **`audit_log`** — append-only event log (DB trigger blocks UPDATE/DELETE)
 
----
+### OID4VCI
+- **`oauth_par_requests`** — PAR entries with PKCE code_challenge, authorization_details (90s TTL)
+- **`oauth_auth_codes`** — authorization codes post-redirect (5-min TTL)
+- **`oauth_dpop_nonces`** — DPoP nonce anti-replay store
 
-## Documentation
-
-- [Design Spec](docs/superpowers/specs/2026-05-22-did-zkp-api-design.md) — architecture, data model, flows, security rationale
-- [Implementation Plan](docs/superpowers/plans/2026-05-22-did-zkp-api.md) — 19-task TDD implementation guide
-- [Interactive API Docs](http://localhost:3000/docs) — Scalar UI (server must be running)
+### OID4VP
+- **`vp_sessions`** — VP session state (pending → verified / failed / expired), DCQL query, nonce, result
 
 ---
 
 ## Standards & References
 
+- [OpenID4VC HAIP 1.0](https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0-final.html)
+- [SD-JWT VC — draft-ietf-oauth-sd-jwt-vc](https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html)
+- [SD-JWT — RFC draft-ietf-oauth-selective-disclosure-jwt](https://datatracker.ietf.org/doc/draft-ietf-oauth-selective-disclosure-jwt/)
+- [Token Status List — draft-ietf-oauth-status-list](https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-06.html)
+- [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+- [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+- [RFC 9449 — DPoP](https://www.rfc-editor.org/rfc/rfc9449)
+- [RFC 9126 — PAR](https://www.rfc-editor.org/rfc/rfc9126)
+- [ISO 18013-5 mso_mdoc](https://www.iso.org/standard/69084.html)
 - [W3C DID Core 1.0](https://www.w3.org/TR/did-core/)
-- [W3C Verifiable Credentials Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/)
-- [BBS Cryptosuite 2023](https://www.w3.org/TR/vc-di-bbs/)
-- [Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/)
-- [did:key Method](https://w3c-ccg.github.io/did-method-key/)
 - [OWASP API Security Top 10](https://owasp.org/API-Security/)
