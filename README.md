@@ -621,7 +621,7 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TB
 
     [*] --> Account_Created : POST /v1/auth/signup
 
