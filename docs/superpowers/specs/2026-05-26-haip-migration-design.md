@@ -287,14 +287,104 @@ Each credential is assigned a unique, random index in the list at issuance. The 
 
 ---
 
+## Phase 1 (addition) — mso_mdoc / ISO 18013-5 Credential Format
+
+### Goal
+Issue and verify **ISO mdoc** (`mso_mdoc`) credentials alongside SD-JWT VC. Both formats share the same P-256 signing key; the difference is the encoding (CBOR + COSE vs JWT + JSON) and the document structure.
+
+### mso_mdoc structure
+
+An mdoc credential consists of:
+
+1. **IssuerSigned** — the issuer-controlled part, CBOR-encoded:
+   - `nameSpaces`: map of namespace (e.g. `org.iso.18013.5.1`) → array of `IssuerSignedItem`
+   - `issuerAuth`: COSE_Sign1 containing the **Mobile Security Object (MSO)**
+
+2. **MSO** (inside `issuerAuth`): signed CBOR containing:
+   - `docType` (e.g. `org.iso.18013.5.1.mDL`)
+   - `validityInfo` (`signed`, `validFrom`, `validUntil`)
+   - `valueDigests`: map of namespace → map of `digestID` → SHA-256 digest of each `IssuerSignedItem`
+   - `deviceKeyInfo`: holder's P-256 public key for binding
+
+3. **DeviceResponse** (what the holder sends to a verifier):
+   - Selected `IssuerSignedItems` (the ones being disclosed)
+   - `DeviceAuth`: `DeviceSigned` with a `DeviceSignature` (COSE_Sign1 over a session transcript)
+
+Each `IssuerSignedItem` (CBOR array): `[random_bytes, digestID, elementIdentifier, elementValue]`
+
+### Namespaces
+
+HAIP uses the ISO 18013-5 standard namespaces:
+
+| Namespace | Purpose |
+|---|---|
+| `org.iso.18013.5.1` | Core mDL fields (family_name, given_name, birth_date, etc.) |
+| `org.iso.18013.5.1.aamva` | US-specific fields |
+| Custom (e.g. `org.example.hotel.1`) | App-specific credential types |
+
+For non-mDL use cases (e.g. hotel guest credential, university degree), define a custom docType and namespace.
+
+### Issuing mdoc (`POST /v1/credentials/issue` with `format: "mso_mdoc"`)
+
+Request adds:
+```json
+{
+  "format": "mso_mdoc",
+  "docType": "org.iso.18013.5.1.mDL",
+  "nameSpaces": {
+    "org.iso.18013.5.1": {
+      "family_name": "Smith",
+      "given_name": "Alice",
+      "birth_date": "1990-01-01"
+    }
+  },
+  "deviceKey": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+}
+```
+
+Server:
+1. Assigns each element a `digestID` and generates `random` bytes
+2. Computes SHA-256 of CBOR-encoded `[random, digestID, elementIdentifier, elementValue]` per element
+3. Builds MSO with `valueDigests` and `deviceKeyInfo`
+4. Signs MSO with issuer's P-256 key via COSE_Sign1 (`alg: -7` = ES256)
+5. Stores full `IssuerSigned` CBOR (base64url) in `credentials.mdoc` column
+
+### Presenting mdoc (OID4VP `direct_post`)
+
+Holder constructs a `DeviceResponse` by:
+1. Selecting which `IssuerSignedItems` to include (omit others = selective disclosure)
+2. Signing a `DeviceSigned` structure over the session transcript (contains `nonce` + `response_uri`)
+3. POSTing the CBOR `DeviceResponse` as base64url in `vp_token`
+
+### Verifying mdoc
+
+1. Decode base64url `vp_token` → CBOR `DeviceResponse`
+2. Verify `issuerAuth` COSE_Sign1 signature (issuer's P-256 key from MSO `docType` trust chain / registry)
+3. Recompute SHA-256 digests of disclosed `IssuerSignedItems`, confirm they match `valueDigests` in MSO
+4. Verify `DeviceAuth` COSE_Sign1 over session transcript using `deviceKeyInfo` from MSO
+5. Check `docType` matches expected, `validityInfo.validUntil` not expired
+6. Check issuer trust registry
+
+### DB changes
+
+```sql
+ALTER TABLE credentials ADD COLUMN mdoc          TEXT;       -- base64url CBOR IssuerSigned
+ALTER TABLE credentials ADD COLUMN mdoc_doc_type TEXT;       -- e.g. org.iso.18013.5.1.mDL
+ALTER TABLE credentials ADD COLUMN device_key    JSONB;      -- holder P-256 JWK (for server-custodial flows)
+```
+
+The `format` field determines which column is populated (`sd_jwt` vs `mdoc`).
+
+---
+
 ## What is NOT in scope (Phase 4+)
 
 - X.509 certificate trust chains (`x5c` JOSE header, CA infrastructure)
 - OpenID Federation 1.0 trust chains
-- `mso_mdoc` / ISO 18013-5 credential format
 - True holder key custody (wallet client with secure enclave)
 - Response encryption (JWE ECDH-ES) on OID4VP responses
 - Full wallet attestation with hardware-backed X.509 chain
+- MSO revocation via ISO/IEC 18013-5 edition 2 mechanisms (Phase 1 uses Token Status List for both formats)
 
 ---
 
@@ -322,7 +412,8 @@ postgres ← unchanged
 
 **Add:**
 ```
-(none) — all new crypto uses jose + Bun Web Crypto API
+cbor2      ← CBOR encode/decode (ISO 18013-5 wire format)
+cose-js    ← COSE_Sign1 for mdoc issuerAuth and DeviceAuth
 ```
 
 ---
@@ -334,22 +425,23 @@ src/
   shared/
     crypto/
       p256.ts          NEW — P-256 key gen, did:key, JWK helpers
-      sd-jwt.ts        NEW — SD-JWT issue, disclose, verify
+      sd-jwt.ts        NEW — SD-JWT VC issue, disclose, verify
+      mdoc.ts          NEW — ISO 18013-5 IssuerSigned build, DeviceResponse verify
       keys.ts          KEEP — AES-GCM key encryption (unchanged)
       bbs.ts           DELETE
       did-key.ts       REPLACE (now uses p256.ts)
     jsonld/            DELETE entire directory
   domains/
     credentials/
-      service.ts       REPLACE issueCredential → SD-JWT
+      service.ts       REPLACE issueCredential → SD-JWT or mdoc (by format param)
     presentation/
-      service.ts       REPLACE deriveSelectivePresentation + verifyVp → SD-JWT
+      service.ts       REPLACE deriveSelectivePresentation + verifyVp → SD-JWT / mdoc
     oauth/             NEW domain
       routes.ts        OID4VCI + OID4VP endpoints
-      service.ts       PAR, token, credential, direct_post logic
+      service.ts       PAR, token, credential, direct_post logic (both formats)
       repository.ts    oauth_par_requests, oauth_auth_codes, vp_sessions
   migrations/
-    006_haip_p1.sql    DROP bls columns, ADD sd_jwt + status_list columns
+    006_haip_p1.sql    DROP bls columns, ADD sd_jwt + mdoc + status_list columns
     007_haip_p2.sql    ADD oauth_par_requests, oauth_auth_codes, oauth_dpop_nonces
     008_haip_p3.sql    ADD vp_sessions
 ```
