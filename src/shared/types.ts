@@ -7,10 +7,8 @@ export interface DidRecord {
   id: string
   role: Role
   document: Record<string, unknown>
-  publicKey: string           // Ed25519 multibase (for DID Auth)
-  privateKey: string          // AES-GCM encrypted Ed25519 private key
-  blsPublicKey: string | null // BLS12-381 G2 multibase (issuers only)
-  blsPrivateKey: string | null // AES-GCM encrypted BLS12-381 (issuers only)
+  publicKey: string           // P-256 JWK as JSON string
+  privateKey: string          // AES-GCM encrypted P-256 JWK JSON string
   createdAt: Date
   deactivatedAt: Date | null
 }
@@ -25,6 +23,12 @@ export interface CredentialRecord {
   status: ResourceStatus
   issuedAt: Date
   expiresAt: Date | null
+  sdJwt: string | null
+  mdoc: string | null
+  mdocDocType: string | null
+  deviceKey: Record<string, unknown> | null
+  statusListId: string
+  statusListIndex: number | null
 }
 
 export interface PresentationRecord {

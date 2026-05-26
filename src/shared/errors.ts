@@ -20,7 +20,7 @@ export const Errors = {
   ATTESTATION_NOT_FOUND: (id: string) =>
     new AppError('ATTESTATION_NOT_FOUND', `Attestation ${id} not found`, 404),
   INVALID_PROOF: () =>
-    new AppError('INVALID_PROOF', 'BBS+ proof verification failed', 422),
+    new AppError('INVALID_PROOF', 'Proof verification failed', 422),
   CREDENTIAL_REVOKED: () =>
     new AppError('CREDENTIAL_REVOKED', 'The credential has been revoked', 422),
   ISSUER_NOT_TRUSTED: () =>
@@ -65,4 +65,14 @@ export const Errors = {
     new AppError('INSUFFICIENT_ORG_ROLE', 'Insufficient organization role for this action', 403),
   ORG_NOT_FOUND: (id: string) =>
     new AppError('ORG_NOT_FOUND', `Organization ${id} not found`, 404),
+  INVALID_DPOP: () =>
+    new AppError('INVALID_DPOP', 'DPoP proof verification failed', 401),
+  INVALID_GRANT: () =>
+    new AppError('INVALID_GRANT', 'The provided authorization grant is invalid or expired', 400),
+  INVALID_REQUEST: () =>
+    new AppError('INVALID_REQUEST', 'The request is missing a required parameter or is otherwise malformed', 400),
+  INVALID_CLIENT: () =>
+    new AppError('INVALID_CLIENT', 'Client authentication failed', 401),
+  UNSUPPORTED_FORMAT: () =>
+    new AppError('UNSUPPORTED_FORMAT', 'The requested credential format is not supported in this path', 400),
 }
