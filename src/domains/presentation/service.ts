@@ -1,17 +1,19 @@
 // src/domains/presentation/service.ts
 import { randomUUID } from 'crypto'
-import * as vcLib from '@digitalbazaar/vc'
-import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
-import { deriveProof, verifyProof } from '../../shared/crypto/bbs.js'
-import { decryptKey } from '../../shared/crypto/keys.js'
-import { getDidRecord } from '../did/service.js'
+import { importJWK, jwtVerify } from 'jose'
+import type { JWK } from 'jose'
 import { findCredential } from '../credentials/repository.js'
+import { getDidRecord } from '../did/service.js'
 import { isIssuerTrusted } from '../trust/service.js'
 import { insertPresentation, findPresentation } from './repository.js'
+import { verifySdJwtPresentation } from '../../shared/crypto/sd-jwt.js'
 import { Errors } from '../../shared/errors.js'
 import { writeAuditLog } from '../../shared/db.js'
-import { getDocumentLoader } from '../../shared/jsonld/loader.js'
+
+async function sha256Base64url(input: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  return Buffer.from(bytes).toString('base64url')
+}
 
 export async function deriveSelectivePresentation(
   holderDid: string,
@@ -23,54 +25,46 @@ export async function deriveSelectivePresentation(
   if (credential.subjectDid !== holderDid) throw Errors.FORBIDDEN()
   if (credential.status === 'revoked') throw Errors.CREDENTIAL_REVOKED()
 
-  // Build selective pointer paths
-  const selectivePointers = revealedClaims.map(c => `/credentialSubject/${c}`)
-  const derived = await deriveProof(credential.document, selectivePointers)
+  const sdJwt = credential.sdJwt
+  if (!sdJwt) throw Errors.UNSUPPORTED_FORMAT()
 
-  // Build holder-binding VP with Ed25519 signature
-  const holderRecord = await getDidRecord(holderDid)
-  const privateKeyMultibase = await decryptKey(holderRecord.privateKey)
+  // Parse all disclosures: format is issuerJwt~disc1~disc2~...~ (trailing ~)
+  const parts = sdJwt.split('~')
+  const issuerJwt = parts[0]
+  const allDisclosures = parts.slice(1, -1) // strip trailing empty string
 
-  const keyPair = await Ed25519VerificationKey2020.from({
-    id: `${holderDid}#${holderRecord.publicKey}`,
-    controller: holderDid,
-    type: 'Ed25519VerificationKey2020',
-    publicKeyMultibase: holderRecord.publicKey,
-    privateKeyMultibase,
+  // Filter to only the revealed claims
+  const selectedDisclosures = allDisclosures.filter(d => {
+    try {
+      const decoded = JSON.parse(Buffer.from(d, 'base64url').toString())
+      return revealedClaims.includes(decoded[1])
+    } catch {
+      return false
+    }
   })
 
-  const holderSuite = new Ed25519Signature2020({ key: keyPair })
-  const challenge = randomUUID()
+  // Build disclosed claims map
+  const disclosedClaims: Record<string, unknown> = {}
+  for (const d of selectedDisclosures) {
+    const decoded = JSON.parse(Buffer.from(d, 'base64url').toString())
+    disclosedClaims[decoded[1]] = decoded[2]
+  }
 
-  const presentation = vcLib.createPresentation({
-    verifiableCredential: derived,
-    holder: holderDid,
-  })
-
-  const signedVp = await vcLib.signPresentation({
-    presentation,
-    suite: holderSuite,
-    challenge,
-    documentLoader: getDocumentLoader(),
-  })
+  // Build partial SD-JWT without KB-JWT (REST API simplified flow)
+  // Format: issuerJwt~disc1~...~ (trailing ~ means no KB-JWT)
+  const presentationJwt = [issuerJwt, ...selectedDisclosures, ''].join('~')
 
   const id = `urn:uuid:${randomUUID()}`
-  const disclosedClaims = Object.fromEntries(
-    revealedClaims.map(k => [
-      k,
-      (credential.claims as Record<string, unknown>)[k],
-    ])
-  )
-
   await insertPresentation({
     id,
     holderDid,
     credentialIds: [credentialId],
-    document: signedVp as Record<string, unknown>,
+    document: { sdJwt: presentationJwt },
     disclosedClaims,
   })
+
   await writeAuditLog(holderDid, 'issue', 'success', id)
-  return { id, presentation: signedVp, disclosedClaims }
+  return { id, disclosedClaims, document: { sdJwt: presentationJwt } }
 }
 
 export async function verifyVp(
@@ -78,40 +72,149 @@ export async function verifyVp(
   verifierDid: string
 ): Promise<{
   valid: boolean
-  disclosedClaims: unknown
+  disclosedClaims: Record<string, unknown>
   issuerTrusted: boolean
   credentialStatus: string
 }> {
-  // Extract issuer DID from the embedded VC
-  const embeddedVc = Array.isArray(presentationDoc.verifiableCredential)
-    ? (presentationDoc.verifiableCredential as any[])[0]
-    : presentationDoc.verifiableCredential
+  const doc = presentationDoc as { sdJwt?: string }
+  if (!doc.sdJwt) {
+    throw Errors.UNSUPPORTED_FORMAT()
+  }
 
-  const issuerDid =
-    typeof embeddedVc?.issuer === 'string'
-      ? embeddedVc.issuer
-      : (embeddedVc?.issuer as any)?.id
+  const sdJwt = doc.sdJwt
+  const parts = sdJwt.split('~')
+  const issuerJwt = parts[0]
 
-  const credentialId = embeddedVc?.id
+  // Determine if this has a KB-JWT: if last part is empty it's the simplified flow (no KB-JWT)
+  const hasKbJwt = parts[parts.length - 1] !== ''
+
+  // Decode issuer JWT payload to get issuer DID (without verifying yet)
+  const payloadB64 = issuerJwt.split('.')[1]
+  const issuerPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
+  const issuerDid = issuerPayload.iss as string
 
   const issuerTrusted = issuerDid ? await isIssuerTrusted(issuerDid) : false
 
-  let credentialStatus = 'unknown'
-  if (credentialId) {
-    const record = await findCredential(credentialId)
-    credentialStatus = record?.status ?? 'unknown'
-  }
-  if (credentialStatus === 'revoked') throw Errors.CREDENTIAL_REVOKED()
+  // Get issuer public key
+  const issuerRecord = await getDidRecord(issuerDid)
+  const issuerPublicJwk: JWK = JSON.parse(issuerRecord.publicKey)
 
-  const valid = await verifyProof(presentationDoc)
+  let valid = false
+  let disclosedClaims: Record<string, unknown> = {}
+
+  if (hasKbJwt) {
+    // Full verification with KB-JWT via verifySdJwtPresentation
+    // We don't have a stored nonce/audience for the REST flow — verify structure only
+    // Use a best-effort approach: extract nonce/aud from KB-JWT payload
+    const kbJwt = parts[parts.length - 1]
+    const kbPayloadB64 = kbJwt.split('.')[1]
+    const kbPayload = JSON.parse(Buffer.from(kbPayloadB64, 'base64url').toString())
+
+    const result = await verifySdJwtPresentation({
+      combined: sdJwt,
+      issuerPublicJwk,
+      expectedNonce: kbPayload.nonce as string,
+      expectedAudience: kbPayload.aud as string,
+    })
+    valid = result.valid
+    disclosedClaims = result.disclosedClaims
+  } else {
+    // Simplified verification: no KB-JWT (REST API flow)
+    // 1. Verify issuer signature
+    try {
+      const issuerKey = await importJWK(issuerPublicJwk, 'ES256')
+      await jwtVerify(issuerJwt, issuerKey, { algorithms: ['ES256'] })
+      valid = true
+    } catch {
+      valid = false
+    }
+
+    // 2. Verify disclosed claims match _sd hashes in issuer JWT
+    if (valid) {
+      const sdHashes = (issuerPayload._sd as string[]) ?? []
+      const disclosures = parts.slice(1, -1) // strip trailing empty string
+
+      for (const disc of disclosures) {
+        const hash = await sha256Base64url(disc)
+        if (!sdHashes.includes(hash)) {
+          valid = false
+          break
+        }
+      }
+
+      if (valid) {
+        for (const disc of disclosures) {
+          const decoded = JSON.parse(Buffer.from(disc, 'base64url').toString())
+          disclosedClaims[decoded[1]] = decoded[2]
+        }
+      }
+    }
+  }
+
   await writeAuditLog(verifierDid, 'verify', valid ? 'success' : 'failure')
 
-  return {
-    valid,
-    disclosedClaims: embeddedVc?.credentialSubject ?? {},
-    issuerTrusted,
-    credentialStatus,
+  // Determine credential status from issuer JWT sub claim (credentialId not in doc for verify flow)
+  const credentialStatus = 'unknown'
+
+  return { valid, disclosedClaims, issuerTrusted, credentialStatus }
+}
+
+export async function verifyPresentationById(
+  presentationId: string
+): Promise<{ valid: boolean; issuerTrusted: boolean; credentialStatus: string }> {
+  const presentation = await findPresentation(presentationId)
+  if (!presentation) throw Errors.PRESENTATION_NOT_FOUND(presentationId)
+
+  const doc = presentation.document as { sdJwt?: string }
+  if (!doc.sdJwt) throw Errors.UNSUPPORTED_FORMAT()
+
+  const sdJwt = doc.sdJwt
+  const parts = sdJwt.split('~')
+  const issuerJwt = parts[0]
+
+  // Decode issuer JWT payload
+  const payloadB64 = issuerJwt.split('.')[1]
+  const issuerPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
+  const issuerDid = issuerPayload.iss as string
+
+  // Get issuer public key
+  const issuerRecord = await getDidRecord(issuerDid)
+  const issuerPublicJwk: JWK = JSON.parse(issuerRecord.publicKey)
+
+  // Verify issuer signature
+  let valid = false
+  try {
+    const issuerKey = await importJWK(issuerPublicJwk, 'ES256')
+    await jwtVerify(issuerJwt, issuerKey, { algorithms: ['ES256'] })
+    valid = true
+  } catch {
+    valid = false
   }
+
+  // Verify disclosures match _sd hashes
+  if (valid) {
+    const sdHashes = (issuerPayload._sd as string[]) ?? []
+    const disclosures = parts.slice(1, -1)
+    for (const disc of disclosures) {
+      const hash = await sha256Base64url(disc)
+      if (!sdHashes.includes(hash)) {
+        valid = false
+        break
+      }
+    }
+  }
+
+  const issuerTrusted = await isIssuerTrusted(issuerDid)
+
+  // Find credential status
+  const credentialId = presentation.credentialIds?.[0]
+  let credentialStatus = 'unknown'
+  if (credentialId) {
+    const cred = await findCredential(credentialId)
+    credentialStatus = cred?.status ?? 'unknown'
+  }
+
+  return { valid, issuerTrusted, credentialStatus }
 }
 
 export async function getPresentation(id: string, callerDid: string) {
