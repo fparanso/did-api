@@ -8,7 +8,7 @@ process.env.JWT_SECRET = 'test-secret'
 process.env.NODE_ENV = 'test'
 process.env.CORS_ORIGIN = 'http://localhost:3000'
 
-import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
+import { importJWK } from 'jose'
 
 let app: { fetch: (req: Request) => Promise<Response> }
 let sql: any
@@ -57,8 +57,7 @@ async function createAndAuth(role: string) {
   expect(createRes.status).toBe(201)
   const createBody = await createRes.json()
   const did: string = createBody.did
-  const privateKeyMultibase: string = createBody.privateKey
-  const publicKeyMultibase: string = did.replace('did:key:', '')
+  const privateKeyJwk = createBody.privateKey // raw P-256 private JWK (returned once at creation)
 
   // 2. Get challenge
   const chalRes = await app.fetch(new Request('http://localhost/v1/auth/challenge', {
@@ -69,16 +68,11 @@ async function createAndAuth(role: string) {
   expect(chalRes.status).toBe(200)
   const { challengeId, nonce } = await chalRes.json()
 
-  // 3. Sign the nonce
-  const keyPair = await Ed25519VerificationKey2020.from({
-    type: 'Ed25519VerificationKey2020',
-    publicKeyMultibase,
-    privateKeyMultibase,
-  })
-  const signer = keyPair.signer()
+  // 3. Sign the nonce with P-256 ECDSA
+  const privateKey = await importJWK(privateKeyJwk, 'ES256') as CryptoKey
   const message = new TextEncoder().encode(`${did}:${nonce}`)
-  const signatureBytes = await signer.sign({ data: message })
-  const signature = Buffer.from(signatureBytes).toString('base64')
+  const sigDer = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, message)
+  const signature = Buffer.from(sigDer).toString('base64')
 
   // 4. Verify and get token
   const verifyRes = await app.fetch(new Request('http://localhost/v1/auth/verify', {
@@ -89,7 +83,7 @@ async function createAndAuth(role: string) {
   expect(verifyRes.status).toBe(200)
   const { token } = await verifyRes.json()
 
-  return { did, token, privateKeyMultibase }
+  return { did, token }
 }
 
 describe('Full DID+VC+VP lifecycle', () => {

@@ -22,10 +22,10 @@ export async function findDid(id: string): Promise<DidRecord | null> {
     id: row.id,
     role: row.role,
     document: row.document,
-    publicKey: row.public_key,
-    privateKey: row.private_key,
-    createdAt: row.created_at,
-    deactivatedAt: row.deactivated_at ?? null,
+    publicKey: row.publicKey,
+    privateKey: row.privateKey,
+    createdAt: row.createdAt,
+    deactivatedAt: row.deactivatedAt ?? null,
   }
 }
 

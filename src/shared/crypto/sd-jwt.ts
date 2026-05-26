@@ -6,6 +6,7 @@ export interface SdJwtIssueOptions {
   issuerPrivateJwk: JWK
   issuerDid: string
   subjectDid: string
+  credentialId: string
   vct: string
   claims: Record<string, unknown>
   holderPublicJwk: JWK
@@ -21,7 +22,7 @@ function randomSalt(): string {
 }
 
 export async function issueSdJwt(opts: SdJwtIssueOptions): Promise<string> {
-  const { issuerPrivateJwk, issuerDid, subjectDid, vct, claims, holderPublicJwk } = opts
+  const { issuerPrivateJwk, issuerDid, subjectDid, credentialId, vct, claims, holderPublicJwk } = opts
 
   // Build disclosures: one per claim
   const disclosures: string[] = []
@@ -39,6 +40,7 @@ export async function issueSdJwt(opts: SdJwtIssueOptions): Promise<string> {
   const issuerJwt = await new SignJWT({
     vct,
     sub: subjectDid,
+    jti: credentialId,
     _sd: sdHashes,
     _sd_alg: 'sha-256',
     cnf: { jwk: holderPublicJwk },

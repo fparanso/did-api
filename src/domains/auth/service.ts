@@ -1,6 +1,5 @@
 // src/domains/auth/service.ts
-import { SignJWT, jwtVerify } from 'jose'
-import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
+import { SignJWT, jwtVerify, importJWK } from 'jose'
 import { createChallenge, consumeChallenge, createSession } from './repository.js'
 import { sql, writeAuditLog } from '../../shared/db.js'
 import { Errors } from '../../shared/errors.js'
@@ -27,15 +26,12 @@ export async function verifyChallenge(
   `
   if (!row) throw Errors.DID_NOT_FOUND(did)
 
-  // Verify Ed25519 signature over "did:nonce"
-  const keyPair = await Ed25519VerificationKey2020.from({
-    type: 'Ed25519VerificationKey2020',
-    publicKeyMultibase: row.publicKey,
-  })
-  const verifier = keyPair.verifier()
+  // Verify P-256 ECDSA signature over "did:nonce"
+  const publicJwk = JSON.parse(row.publicKey)
+  const publicKey = await importJWK(publicJwk, 'ES256') as CryptoKey
   const message = new TextEncoder().encode(`${did}:${nonce}`)
-  const signature = Buffer.from(signatureBase64, 'base64')
-  const valid = await verifier.verify({ data: message, signature })
+  const signatureBytes = Buffer.from(signatureBase64, 'base64')
+  const valid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, publicKey, signatureBytes, message)
 
   if (!valid) {
     await writeAuditLog(did, 'auth', 'failure')

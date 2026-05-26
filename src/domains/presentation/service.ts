@@ -153,8 +153,13 @@ export async function verifyVp(
 
   await writeAuditLog(verifierDid, 'verify', valid ? 'success' : 'failure')
 
-  // Determine credential status from issuer JWT sub claim (credentialId not in doc for verify flow)
-  const credentialStatus = 'unknown'
+  // Determine credential status from jti (credential ID) in issuer JWT payload
+  const credentialId = issuerPayload.jti as string | undefined
+  let credentialStatus = 'unknown'
+  if (credentialId) {
+    const cred = await findCredential(credentialId)
+    credentialStatus = cred?.status ?? 'unknown'
+  }
 
   return { valid, disclosedClaims, issuerTrusted, credentialStatus }
 }

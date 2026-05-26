@@ -46,6 +46,7 @@ export async function issueCredential(
     issuerPrivateJwk,
     issuerDid,
     subjectDid,
+    credentialId: id,
     vct: credentialType[0],
     claims,
     holderPublicJwk: holderKp.publicJwk,

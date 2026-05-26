@@ -11,18 +11,10 @@
     "test:security": "bun test tests/security"
   },
   "dependencies": {
-    "@digitalbazaar/bbs-2023-cryptosuite": "^2.0.1",
-    "@digitalbazaar/bls12-381-multikey": "^2.1.0",
-    "@digitalbazaar/data-integrity": "^2.5.0",
-    "@digitalbazaar/did-method-key": "^5.3.0",
-    "@digitalbazaar/ed25519-signature-2020": "^5.4.0",
-    "@digitalbazaar/ed25519-verification-key-2020": "^4.2.0",
-    "@digitalbazaar/vc": "^7.3.0",
     "@scalar/hono-api-reference": "^0.10.18",
     "cbor2": "^2.3.0",
     "hono": "^4.4.0",
     "jose": "^5.6.3",
-    "jsonld": "^8.3.2",
     "postgres": "^3.4.4",
     "zod": "^3.23.8"
   },

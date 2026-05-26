@@ -2,8 +2,7 @@
 import { Hono } from 'hono'
 import { apiReference } from '@scalar/hono-api-reference'
 import { AppError } from './shared/errors.js'
-import { runMigrations, sql } from './shared/db.js'
-import { initContextLoader, setDidResolver } from './shared/jsonld/loader.js'
+import { runMigrations } from './shared/db.js'
 import { corsMiddleware } from './shared/middleware/cors.js'
 import { securityHeadersMiddleware } from './shared/middleware/security-headers.js'
 import { createRateLimiter } from './shared/middleware/rate-limit.js'
@@ -14,7 +13,6 @@ import { presentationRouter } from './domains/presentation/routes.js'
 import { trustRouter } from './domains/trust/routes.js'
 import { usersRouter } from './domains/users/routes.js'
 import { orgsRouter } from './domains/organizations/routes.js'
-import { findDid } from './domains/did/repository.js'
 import { openApiSpec } from './shared/openapi.js'
 import type { HonoVariables } from './shared/types.js'
 
@@ -90,17 +88,8 @@ app.onError((err, c) => {
   )
 })
 
-// Startup: run DB migrations, load JSON-LD contexts, wire DID resolver
+// Startup: run DB migrations
 await runMigrations()
-await initContextLoader()
-
-setDidResolver(async (did: string) => {
-  const record = await findDid(did)
-  if (!record || record.deactivatedAt) {
-    throw new AppError('DID_NOT_FOUND', `DID ${did} not found`, 404)
-  }
-  return record.document
-})
 
 export default {
   port: parseInt(process.env.PORT ?? '3000'),
