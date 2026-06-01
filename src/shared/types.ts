@@ -53,6 +53,7 @@ export interface TrustAttestationRecord {
 export interface HonoVariables {
   did: string
   role: Role
+  requestId: string
 }
 
 export interface UserRecord {

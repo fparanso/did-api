@@ -1,11 +1,14 @@
 // src/index.ts
+import './shared/config.js' // Validate environment immediately
 import { Hono } from 'hono'
 import { apiReference } from '@scalar/hono-api-reference'
 import { AppError } from './shared/errors.js'
-import { runMigrations } from './shared/db.js'
+import { runMigrations, sql, checkDbHealth } from './shared/db.js'
 import { corsMiddleware } from './shared/middleware/cors.js'
 import { securityHeadersMiddleware } from './shared/middleware/security-headers.js'
 import { createRateLimiter } from './shared/middleware/rate-limit.js'
+import { requestLoggerAndMetrics } from './shared/middleware/logger.js'
+import { getMetrics } from './shared/metrics.js'
 import { authRouter } from './domains/auth/routes.js'
 import { didRouter } from './domains/did/routes.js'
 import { credentialsRouter } from './domains/credentials/routes.js'
@@ -20,6 +23,7 @@ import type { HonoVariables } from './shared/types.js'
 const app = new Hono<{ Variables: HonoVariables }>()
 
 // Global middleware
+app.use('*', requestLoggerAndMetrics)
 app.use('*', corsMiddleware)
 app.use('*', securityHeadersMiddleware)
 app.use('*', createRateLimiter(100, 60_000))
@@ -37,7 +41,19 @@ app.use('*', async (c, next) => {
 })
 
 // Health check
-app.get('/health', c => c.json({ status: 'ok' }))
+app.get('/health', async c => {
+  const dbOk = await checkDbHealth()
+  const status = dbOk ? 200 : 503
+  return c.json({
+    status: dbOk ? 'ok' : 'error',
+    db: dbOk ? 'ok' : 'error',
+    uptime: process.uptime(),
+    version: '1.3.0',
+  }, status as any)
+})
+
+// Metrics endpoint
+app.get('/metrics', c => c.json(getMetrics()))
 
 // Routes
 app.route('/v1/auth', authRouter)
@@ -93,6 +109,33 @@ app.onError((err, c) => {
 
 // Startup: run DB migrations
 await runMigrations()
+
+let server: any
+
+if (process.env.NODE_ENV !== 'test') {
+  const port = parseInt(process.env.PORT ?? '3000')
+  server = Bun.serve({
+    port,
+    fetch: app.fetch,
+  })
+  console.log(`[server] listening on port ${server.port}`)
+
+  let isShuttingDown = false
+  const handleShutdown = async (signal: string) => {
+    if (isShuttingDown) return
+    isShuttingDown = true
+    console.log(`[server] received ${signal}, shutting down gracefully...`)
+    
+    server.stop()
+    await sql.end()
+    
+    console.log('[server] graceful shutdown complete')
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'))
+  process.on('SIGINT', () => handleShutdown('SIGINT'))
+}
 
 export default {
   port: parseInt(process.env.PORT ?? '3000'),

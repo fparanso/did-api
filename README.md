@@ -864,12 +864,31 @@ bun run dev
 ### Verify
 
 ```bash
+# Verify health and database connectivity
 curl http://localhost:3000/health
-# → {"status":"ok"}
+# → {"status":"ok","db":"ok","uptime":12.34,"version":"1.3.0"}
+
+# Retrieve real-time in-memory metrics
+curl http://localhost:3000/metrics
+# → {"uptime_ms":12345,"routes":{"GET /v1/health":{"requests":2,"errors":0,"p99_ms":4}}}
 
 # Discover OID4VCI capabilities
 curl http://localhost:3000/.well-known/openid-credential-issuer
 ```
+
+### Docker Deployment
+
+The project includes a `Dockerfile` and `docker-compose.yml` to run the application and a PostgreSQL database in Docker containers.
+
+To start the full stack:
+```bash
+docker compose up -d
+```
+This will:
+1. Build the production Hono application container.
+2. Pull and start a PostgreSQL 15 alpine container.
+3. Perform an automated health check on the database before booting the app.
+4. Run migrations and listen on port `3000`.
 
 ### Interactive API Docs
 
@@ -899,7 +918,9 @@ bun test              # All tests
 | `ADMIN_SECRET` | Yes | Secret for `X-Admin-Secret` header on admin endpoints |
 | `CORS_ORIGIN` | No | Allowed CORS origin (default: `http://localhost:3000`) |
 | `PORT` | No | HTTP port (default: `3000`) |
-| `NODE_ENV` | No | `development` or `production` |
+| `NODE_ENV` | No | `development`, `production`, or `test` |
+| `LOG_LEVEL` | No | Severity threshold for structured logs: `debug`, `info`, `warn`, `error` (default: `info`) |
+| `ISSUER_HOST` | No | Host url of the issuer used in OID4VCI metadata (default: `http://localhost:3000`) |
 
 ---
 

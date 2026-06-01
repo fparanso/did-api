@@ -1,0 +1,11 @@
+node_modules
+.git
+.gitignore
+.DS_Store
+.claire
+.claude
+tests
+README.md
+docker-compose.yml
+Dockerfile
+bun.lock

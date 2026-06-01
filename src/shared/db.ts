@@ -47,3 +47,12 @@ export async function writeAuditLog(
     VALUES (${actorDid}, ${action}, ${targetId ?? null}, ${result})
   `
 }
+
+export async function checkDbHealth(): Promise<boolean> {
+  try {
+    await sql`SELECT 1`
+    return true
+  } catch (err) {
+    return false
+  }
+}
