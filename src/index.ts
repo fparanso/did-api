@@ -137,7 +137,8 @@ if (process.env.NODE_ENV !== 'test') {
   process.on('SIGINT', () => handleShutdown('SIGINT'))
 }
 
-export default {
-  port: parseInt(process.env.PORT ?? '3000'),
-  fetch: app.fetch,
-}
+export default process.env.NODE_ENV === 'test'
+  ? app
+  : {
+      port: parseInt(process.env.PORT ?? '3000'),
+    }
