@@ -8,7 +8,7 @@ process.env.ADMIN_SECRET = 'super-secret-admin'
 process.env.NODE_ENV = 'test'
 process.env.CORS_ORIGIN = 'http://localhost:3000'
 
-let app: { fetch: (req: Request) => Promise<Response> }
+let app: any
 let sql: any
 
 beforeAll(async () => {
@@ -17,7 +17,7 @@ beforeAll(async () => {
   await db.runMigrations()
   const rateLimit = await import('../../src/shared/middleware/rate-limit')
   rateLimit.setRateLimitDisabled(true)
-  app = (await import('../../src/index')).default
+  app = (await import('../../src/index')).app
 
   await sql`DELETE FROM password_reset_tokens`
   await sql`DELETE FROM users WHERE email = 'upgradeuser@example.com'`

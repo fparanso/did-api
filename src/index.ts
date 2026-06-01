@@ -142,3 +142,6 @@ export default process.env.NODE_ENV === 'test'
   : {
       port: parseInt(process.env.PORT ?? '3000'),
     }
+
+// Named export for test files — avoids the union type issue with the default export
+export { app }

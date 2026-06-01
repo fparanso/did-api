@@ -93,7 +93,7 @@ export async function issueCredential(
     sdJwt,
     mdoc,
     mdocDocType: 'org.iso.18013.5.1.mDL',
-    deviceKey: holderKp.publicJwk as Record<string, unknown>,
+    deviceKey: holderKp.publicJwk as unknown as Record<string, unknown>,
     statusListId: 'default',
     statusListIndex,
   })

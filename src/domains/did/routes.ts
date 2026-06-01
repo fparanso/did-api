@@ -38,6 +38,6 @@ didRouter.get('/:did', async c => {
 // Protected — deactivate own DID
 didRouter.delete('/:did', jwtMiddleware, async c => {
   const callerDid = c.get('did')
-  await deactivate(c.req.param('did'), callerDid)
+  await deactivate(c.req.param('did')!, callerDid)
   return c.json({ success: true })
 })

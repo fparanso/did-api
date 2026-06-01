@@ -42,6 +42,6 @@ trustRouter.post('/attest', jwtMiddleware, requireRole('attester'), async c => {
 })
 
 trustRouter.post('/attest/:id/revoke', jwtMiddleware, requireRole('attester'), async c => {
-  await revokeIssuerAttestation(c.req.param('id'), c.get('did'))
+  await revokeIssuerAttestation(c.req.param('id')!, c.get('did'))
   return c.json({ success: true })
 })

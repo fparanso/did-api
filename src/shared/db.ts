@@ -21,14 +21,14 @@ export async function runMigrations(): Promise<void> {
     )
   `
   const applied = new Set(
-    (await sql`SELECT name FROM _migrations`).map((r: { name: string }) => r.name)
+    (await sql`SELECT name FROM _migrations`).map((r: any) => r.name)
   )
   const dir = join(__dirname, '../migrations')
   const files = (await readdir(dir)).filter((f: string) => f.endsWith('.sql')).sort()
   for (const file of files) {
     if (applied.has(file)) continue
     const content = await readFile(join(dir, file), 'utf-8')
-    await sql.begin(async (tx: typeof sql) => {
+    await sql.begin(async (tx: any) => {
       await tx.unsafe(content)
       await tx`INSERT INTO _migrations (name) VALUES (${file})`
     })

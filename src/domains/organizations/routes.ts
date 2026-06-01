@@ -44,20 +44,20 @@ orgsRouter.post('/', jwtMiddleware, async c => {
 
 // GET /v1/organizations/:id
 orgsRouter.get('/:id', jwtMiddleware, async c => {
-  const org = await getOrg(c.req.param('id'), c.get('did'))
+  const org = await getOrg(c.req.param('id')!, c.get('did'))
   return c.json(org)
 })
 
 // GET /v1/organizations/:id/members
 orgsRouter.get('/:id/members', jwtMiddleware, async c => {
-  const members = await getOrgMembers(c.req.param('id'), c.get('did'))
+  const members = await getOrgMembers(c.req.param('id')!, c.get('did'))
   return c.json({ members })
 })
 
 // POST /v1/organizations/invites/:token/accept
 // NOTE: Must be registered BEFORE /:id/invites to avoid Hono matching "invites" as :id
 orgsRouter.post('/invites/:token/accept', jwtMiddleware, async c => {
-  await acceptInvite(c.req.param('token'), c.get('did'))
+  await acceptInvite(c.req.param('token')!, c.get('did'))
   return c.json({ success: true })
 })
 
@@ -69,7 +69,7 @@ orgsRouter.post('/:id/invites', jwtMiddleware, async c => {
     return c.json({ error: 'VALIDATION_ERROR', message: parsed.error.message, status: 400 }, 400)
   }
   const result = await inviteMember(
-    c.req.param('id'),
+    c.req.param('id')!,
     c.get('did'),
     parsed.data as { email?: string; did?: string },
     parsed.data.role
@@ -84,18 +84,18 @@ orgsRouter.patch('/:id/members/:userId', jwtMiddleware, async c => {
   if (!parsed.success) {
     return c.json({ error: 'VALIDATION_ERROR', message: parsed.error.message, status: 400 }, 400)
   }
-  await updateMemberRole(c.req.param('id'), c.req.param('userId'), parsed.data.role as OrgMemberRole, c.get('did'))
+  await updateMemberRole(c.req.param('id')!, c.req.param('userId')!, parsed.data.role as OrgMemberRole, c.get('did'))
   return c.json({ success: true })
 })
 
 // DELETE /v1/organizations/:id/members/:userId
 orgsRouter.delete('/:id/members/:userId', jwtMiddleware, async c => {
-  await removeMember(c.req.param('id'), c.req.param('userId'), c.get('did'))
+  await removeMember(c.req.param('id')!, c.req.param('userId')!, c.get('did'))
   return c.json({ success: true })
 })
 
 // DELETE /v1/organizations/:id
 orgsRouter.delete('/:id', jwtMiddleware, async c => {
-  await deleteOrg(c.req.param('id'), c.get('did'))
+  await deleteOrg(c.req.param('id')!, c.get('did'))
   return c.json({ success: true })
 })

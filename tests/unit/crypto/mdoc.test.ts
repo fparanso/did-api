@@ -42,7 +42,7 @@ describe('buildIssuerSigned', () => {
     })
 
     const bytes = Buffer.from(result, 'base64url')
-    const decoded = decode(bytes)
+    const decoded = decode(bytes) as any
     expect(decoded).toBeDefined()
     expect(decoded.nameSpaces).toBeDefined()
     expect(decoded.issuerAuth).toBeDefined()

@@ -6,7 +6,7 @@ export interface SdJwtIssueOptions {
   issuerPrivateJwk: JWK
   issuerDid: string
   subjectDid: string
-  credentialId: string
+  credentialId?: string  // Optional: defaults to urn:uuid:<randomUUID> if not provided
   vct: string
   claims: Record<string, unknown>
   holderPublicJwk: JWK
@@ -22,7 +22,8 @@ function randomSalt(): string {
 }
 
 export async function issueSdJwt(opts: SdJwtIssueOptions): Promise<string> {
-  const { issuerPrivateJwk, issuerDid, subjectDid, credentialId, vct, claims, holderPublicJwk } = opts
+  const { issuerPrivateJwk, issuerDid, subjectDid, vct, claims, holderPublicJwk } = opts
+  const credentialId = opts.credentialId ?? `urn:uuid:${crypto.randomUUID()}`
 
   // Build disclosures: one per claim
   const disclosures: string[] = []

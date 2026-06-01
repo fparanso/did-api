@@ -1,6 +1,7 @@
 // src/domains/oauth/service.ts
 import { SignJWT, jwtVerify, importJWK, decodeJwt } from 'jose'
 import type { JWK } from 'jose'
+import { randomUUID } from 'crypto'
 import { insertParRequest, consumeParRequest, insertAuthCode, consumeAuthCode,
   createDpopNonce, isDpopNonceValid,
   insertVpSession, findVpSession, findVpSessionByNonce, updateVpSession } from './repository.js'
@@ -155,6 +156,7 @@ export async function handleCredentialEndpoint(params: {
       issuerPrivateJwk,
       issuerDid,
       subjectDid: issuerDid,
+      credentialId: `urn:uuid:${randomUUID()}`,
       vct: params.vct ?? 'VerifiableCredential',
       claims: params.claims ?? {},
       holderPublicJwk: holderJwk,

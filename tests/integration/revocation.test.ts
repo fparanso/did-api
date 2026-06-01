@@ -9,7 +9,7 @@ process.env.CORS_ORIGIN = 'http://localhost:3000'
 
 import { importJWK } from 'jose'
 
-let app: { fetch: (req: Request) => Promise<Response> }
+let app: any
 let sql: any
 let runMigrations: () => Promise<void>
 
@@ -50,7 +50,7 @@ beforeAll(async () => {
   runMigrations = db.runMigrations
   const rateLimit = await import('../../src/shared/middleware/rate-limit')
   rateLimit.setRateLimitDisabled(true)
-  app = (await import('../../src/index')).default
+  app = (await import('../../src/index')).app
   await runMigrations()
   await sql`DELETE FROM presentations`
   await sql`DELETE FROM credentials`

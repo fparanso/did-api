@@ -13,6 +13,9 @@ import { getDidRecord } from '../did/service.js'
 import { decryptKey } from '../../shared/crypto/keys.js'
 import type { JWK } from 'jose'
 
+function getHost(): string {
+  return process.env.ISSUER_HOST ?? 'http://localhost:3000'
+}
 export const oauthRouter = new Hono<{ Variables: HonoVariables }>()
 export const wellKnownRouter = new Hono()
 
@@ -108,10 +111,6 @@ oauthRouter.post('/credentials', async c => {
   return c.json(result)
 })
 
-function getHost(): string {
-  return process.env.ISSUER_HOST ?? 'http://localhost:3000'
-}
-
 // VP — initiate (verifier creates session)
 oauthRouter.post('/vp/initiate', jwtMiddleware, async c => {
   const body = await c.req.json().catch(() => ({}))
@@ -125,7 +124,7 @@ oauthRouter.post('/vp/initiate', jwtMiddleware, async c => {
 
 // VP — signed request object (wallet fetches)
 oauthRouter.get('/request/:id', async c => {
-  const sessionId = c.req.param('id')
+  const sessionId = c.req.param('id')!
   const jwt = await buildSignedRequestObject(sessionId)
   return new Response(jwt, { headers: { 'Content-Type': 'application/oauth-authz-req+jwt' } })
 })
@@ -147,6 +146,6 @@ oauthRouter.post('/direct_post', async c => {
 
 // VP — result (verifier polls)
 oauthRouter.get('/vp-result/:id', jwtMiddleware, async c => {
-  const result = await handleVpResult(c.req.param('id'))
+  const result = await handleVpResult(c.req.param('id')!)
   return c.json(result)
 })

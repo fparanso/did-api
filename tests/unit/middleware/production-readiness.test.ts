@@ -26,7 +26,7 @@ describe('Health endpoint', () => {
   test('returns 200/503 based on database health', async () => {
     // We can import the actual app to test the integrated /health route
     const appModule = await import('../../../src/index.js')
-    const app = appModule.default
+    const app = appModule.app
 
     // Test health when DB is healthy (or mock checkDbHealth)
     const res = await app.fetch(new Request('http://localhost/health'))
@@ -40,7 +40,7 @@ describe('Health endpoint', () => {
 describe('Metrics endpoint', () => {
   test('returns metrics JSON', async () => {
     const appModule = await import('../../../src/index.js')
-    const app = appModule.default
+    const app = appModule.app
 
     const res = await app.fetch(new Request('http://localhost/metrics'))
     expect(res.status).toBe(200)

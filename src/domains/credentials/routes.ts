@@ -24,7 +24,7 @@ const IssueSchema = z.object({
 
 // Public — Token Status List 1.0
 credentialsRouter.get('/status-lists/:id', async c => {
-  const jwt = await buildStatusList(c.req.param('id'))
+  const jwt = await buildStatusList(c.req.param('id')!)
   return new Response(jwt, {
     headers: { 'Content-Type': 'application/statuslist+jwt' },
   })
@@ -32,7 +32,7 @@ credentialsRouter.get('/status-lists/:id', async c => {
 
 // Public — status check (before protected routes)
 credentialsRouter.get('/:id/status', async c => {
-  const result = await getCredentialStatus(c.req.param('id'))
+  const result = await getCredentialStatus(c.req.param('id')!)
   return c.json(result)
 })
 
@@ -68,12 +68,12 @@ credentialsRouter.post(
 
 // Protected — fetch by ID (issuer or subject)
 credentialsRouter.get('/:id', jwtMiddleware, async c => {
-  const record = await getCredential(c.req.param('id'), c.get('did'))
+  const record = await getCredential(c.req.param('id')!, c.get('did'))
   return c.json(record)
 })
 
 // Protected — revoke (issuer only)
 credentialsRouter.post('/:id/revoke', jwtMiddleware, requireRole('issuer'), async c => {
-  await revokeCredentialById(c.req.param('id'), c.get('did'))
+  await revokeCredentialById(c.req.param('id')!, c.get('did'))
   return c.json({ success: true })
 })

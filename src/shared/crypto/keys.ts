@@ -13,13 +13,13 @@ async function getKey(): Promise<CryptoKey> {
     throw new Error('KEY_ENCRYPTION_SECRET must be a 64-char hex string (32 bytes)')
   }
   return crypto.subtle.importKey(
-    'raw', hexToBytes(secret), 'AES-GCM', false, ['encrypt', 'decrypt']
+    'raw', hexToBytes(secret) as Uint8Array<ArrayBuffer>, 'AES-GCM', false, ['encrypt', 'decrypt']
   )
 }
 
 export async function encryptKey(value: string): Promise<string> {
   const key = await getKey()
-  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const iv = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array<ArrayBuffer>
   const data = new TextEncoder().encode(value)
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data)
   const ivB64 = Buffer.from(iv).toString('base64')

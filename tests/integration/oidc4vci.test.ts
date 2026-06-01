@@ -9,14 +9,14 @@ import { describe, test, expect, beforeAll } from 'bun:test'
 import { generateKeyPair, exportJWK, SignJWT } from 'jose'
 import type { JWK } from 'jose'
 
-let app: { fetch: (req: Request) => Promise<Response> }
+let app: any
 
 beforeAll(async () => {
   const db = await import('../../src/shared/db')
   const rateLimit = await import('../../src/shared/middleware/rate-limit')
   rateLimit.setRateLimitDisabled(true)
   await db.runMigrations()
-  app = (await import('../../src/index')).default
+  app = (await import('../../src/index')).app
 
   const sql = db.sql
   await sql`DELETE FROM oauth_par_requests`.catch(() => {})

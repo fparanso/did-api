@@ -55,7 +55,7 @@ async function coseSign1(payload: Uint8Array, privateJwk: JWK): Promise<Uint8Arr
 
   const cryptoKey = (await importJWK(privateJwk, 'ES256')) as CryptoKey
   const sigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, sigStructure)
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, sigStructure as Uint8Array<ArrayBuffer>)
   )
   // Normalize to 64-byte raw r||s (COSE requirement)
   const sig = isDerSignature(sigBytes) ? derToRaw(sigBytes) : sigBytes
@@ -84,11 +84,11 @@ async function coseVerify1(coseBytes: Uint8Array, publicJwk: JWK): Promise<Uint8
   const cryptoKey = (await importJWK(publicJwk, 'ES256')) as CryptoKey
 
   // Try raw format first (Bun), fall back to DER (Node.js)
-  let ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, sig, sigStructure)
+  let ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, sig as Uint8Array<ArrayBuffer>, sigStructure as Uint8Array<ArrayBuffer>)
   if (!ok) {
     // Try DER format as fallback
     const derSig = rawToDer(sig)
-    ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, derSig, sigStructure)
+    ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, cryptoKey, derSig as Uint8Array<ArrayBuffer>, sigStructure as Uint8Array<ArrayBuffer>)
   }
   if (!ok) throw new Error('COSE_Sign1 verification failed')
   return payload
@@ -121,7 +121,7 @@ export async function buildIssuerSigned(opts: IssuerSignedOptions): Promise<stri
       const itemTagged = new Tag(24, itemBytes)
       issuerNameSpaces[ns].push(encode(itemTagged))
 
-      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', itemBytes))
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', itemBytes as Uint8Array<ArrayBuffer>))
       valueDigests[ns][digestId] = digest
       digestId++
     }
@@ -188,7 +188,7 @@ export async function verifyDeviceResponse(opts: {
       for (const itemBytes of items) {
         const itemTagged = decode(itemBytes) as Tag
         const innerBytes = itemTagged.contents as Uint8Array
-        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', innerBytes))
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', innerBytes as Uint8Array<ArrayBuffer>))
         const item = decode(innerBytes) as {
           digestID: number
           elementIdentifier: string

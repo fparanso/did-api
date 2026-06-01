@@ -1,5 +1,6 @@
 // tests/fixtures/generate.ts
-import { generateDidKey, generateBlsKeyPair, buildDidDocument } from '../../src/shared/crypto/did-key'
+// Utility script to regenerate static test fixtures (run manually, not as part of the test suite)
+import { generateDidKey } from '../../src/shared/crypto/did-key'
 import { writeFile, mkdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -9,20 +10,12 @@ process.env.KEY_ENCRYPTION_SECRET = 'a'.repeat(64)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-async function generateFixture(role: string, withBls = false) {
-  const { did, publicKeyMultibase, privateKeyMultibase } = await generateDidKey()
-  let blsPublicKey: string | undefined
-  let blsSecretKey: string | undefined
-  if (withBls) {
-    const bls = await generateBlsKeyPair(did)
-    blsPublicKey = bls.publicKeyMultibase
-    blsSecretKey = bls.secretKeyMultibase
-  }
-  const document = buildDidDocument(did, publicKeyMultibase, blsPublicKey)
-  return { did, role, document, publicKeyMultibase, privateKeyMultibase, blsPublicKey, blsSecretKey }
+async function generateFixture(role: string) {
+  const { did, publicKeyJwk, privateKeyJwk, document } = await generateDidKey()
+  return { did, role, document, publicKeyJwk, privateKeyJwk }
 }
 
-const issuer = await generateFixture('issuer', true)
+const issuer = await generateFixture('issuer')
 const subject = await generateFixture('subject')
 const attester = await generateFixture('attester')
 const verifier = await generateFixture('verifier')
