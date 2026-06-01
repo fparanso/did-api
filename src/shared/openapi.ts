@@ -500,9 +500,6 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authentication:** Requires a valid Bearer JWT (from either \`/v1/auth/login\` or \`/v1/auth/verify\`).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         responses: {
           '200': {
             description: 'Profile retrieved',
@@ -523,9 +520,6 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Non-editable:** \`email\`, \`did\`, \`role\` (use admin endpoint to change role).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -651,9 +645,6 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authentication:** Requires a valid Bearer JWT.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -722,8 +713,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
         summary: 'Get organization details',
         description: `Returns the organization record. Caller must be a member of the organization (any role).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -759,8 +749,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authorization:** Caller must be an **owner** of the organization.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -806,8 +795,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authorization:** Caller must be a member of the organization (any role).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -861,8 +849,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 - Owners can change anyone except themselves
 - Cannot demote the last owner (returns \`409 CANNOT_REMOVE_LAST_OWNER\`)`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -941,8 +928,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Last owner protection:** Cannot remove the last owner — returns \`409 CANNOT_REMOVE_LAST_OWNER\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -1002,8 +988,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Duplicate guard:** Inviting a user who is already a member returns \`409 ALREADY_MEMBER\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -1088,8 +1073,7 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authentication:** Caller must be authenticated (Bearer JWT).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'token',
             in: 'path',
@@ -1389,9 +1373,6 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT from \`POST /v1/auth/verify\` or \`POST /v1/auth/login\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         responses: {
           '200': {
             description: 'Successful retrieval',
@@ -1475,8 +1456,7 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT from \`POST /v1/auth/verify\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'did',
             in: 'path',
@@ -1526,9 +1506,6 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         responses: {
           '200': {
             description: 'Credentials list retrieved',
@@ -1580,9 +1557,6 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -1668,8 +1642,7 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT (issuer or subject role).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -1713,8 +1686,7 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -1817,9 +1789,6 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
 
 **Access control:** Requires role \`subject\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -1911,9 +1880,6 @@ Requires either an inline \`presentation\` object containing \`sdJwt\` or a \`pr
 
 **Access control:** Requires role \`verifier\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -1990,8 +1956,7 @@ Requires either an inline \`presentation\` object containing \`sdJwt\` or a \`pr
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`subject\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -2104,9 +2069,6 @@ This API uses a **delegated trust** model. Attesters act as trust anchors (simil
 
 **Access control:** Requires role \`attester\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -2167,8 +2129,7 @@ This API uses a **delegated trust** model. Attesters act as trust anchors (simil
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`attester\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
@@ -2673,9 +2634,6 @@ A verifier calls this endpoint to start a Verifiable Presentation request sessio
 
 **Authentication:** Requires a valid Bearer JWT with role \`verifier\`.`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' }
-        ],
         requestBody: {
           required: true,
           content: {
@@ -2935,8 +2893,7 @@ The verifier polls this endpoint after initiating a VP session to check whether 
 
 **Authentication:** Requires the same Bearer JWT that initiated the session (verifier role).`,
         security: [{ BearerAuth: [] }],
-        parameters: [
-          { $ref: '#/components/parameters/AuthorizationHeader' },
+        parameters: [,
           {
             name: 'id',
             in: 'path',
