@@ -108,6 +108,31 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
         description: 'DPoP-bound access token (RFC 9449). Requires `DPoP` header containing a proof JWT.',
       },
     },
+    parameters: {
+      AuthorizationHeader: {
+        name: 'Authorization',
+        in: 'header',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Bearer authentication token. Must be in the format: `Bearer <token>`',
+        example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      },
+      DPoPHeader: {
+        name: 'DPoP',
+        in: 'header',
+        required: true,
+        schema: { type: 'string' },
+        description: 'DPoP proof JWT as specified in RFC 9449. Proves possession of the private key corresponding to the public key in the access token.',
+      },
+      DPoPAuthorizationHeader: {
+        name: 'Authorization',
+        in: 'header',
+        required: true,
+        schema: { type: 'string' },
+        description: 'DPoP authentication token. Must be in the format: `DPoP <token>`',
+        example: 'DPoP eyJhbGciOiJFUzI1NiIsImRwb3Bfa2V5Ijp7...',
+      },
+    },
     schemas: {
       ErrorResponse: {
         type: 'object',
@@ -260,10 +285,28 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['email', 'password', 'name'],
                 properties: {
-                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
-                  password: { type: 'string', minLength: 8, example: 'password123' },
-                  name: { type: 'string', example: 'Alice Smith' },
-                  organizationName: { type: 'string', example: 'Acme University', description: 'Optional display name for the user\'s organization affiliation.' },
+                  email: {
+                    type: 'string',
+                    format: 'email',
+                    description: 'The unique email address to register for the new user account.',
+                    example: 'alice@example.com'
+                  },
+                  password: {
+                    type: 'string',
+                    minLength: 8,
+                    description: 'The user password. Must be at least 8 characters long.',
+                    example: 'password123'
+                  },
+                  name: {
+                    type: 'string',
+                    description: 'The full name of the user.',
+                    example: 'Alice Smith'
+                  },
+                  organizationName: {
+                    type: 'string',
+                    description: 'Optional display name for the user\'s organization affiliation.',
+                    example: 'Acme University'
+                  },
                 },
               },
             },
@@ -306,8 +349,17 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['email', 'password'],
                 properties: {
-                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
-                  password: { type: 'string', example: 'password123' },
+                  email: {
+                    type: 'string',
+                    format: 'email',
+                    description: 'The registered email address.',
+                    example: 'alice@example.com'
+                  },
+                  password: {
+                    type: 'string',
+                    description: 'The password for the account.',
+                    example: 'password123'
+                  },
                 },
               },
             },
@@ -346,7 +398,12 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['email'],
                 properties: {
-                  email: { type: 'string', format: 'email', example: 'alice@example.com' },
+                  email: {
+                    type: 'string',
+                    format: 'email',
+                    description: 'The registered email address to send the password reset token to.',
+                    example: 'alice@example.com'
+                  },
                 },
               },
             },
@@ -389,8 +446,19 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['token', 'newPassword'],
                 properties: {
-                  token: { type: 'string', minLength: 64, maxLength: 64, example: 'a3f9e2b1...' },
-                  newPassword: { type: 'string', minLength: 8, example: 'newPassword1' },
+                  token: {
+                    type: 'string',
+                    minLength: 64,
+                    maxLength: 64,
+                    description: 'The 64-character hex reset token generated during the forgot-password flow.',
+                    example: 'a3f9e2b1...'
+                  },
+                  newPassword: {
+                    type: 'string',
+                    minLength: 8,
+                    description: 'The new password to set for the account. Must be at least 8 characters long.',
+                    example: 'newPassword1'
+                  },
                 },
               },
             },
@@ -432,6 +500,9 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authentication:** Requires a valid Bearer JWT (from either \`/v1/auth/login\` or \`/v1/auth/verify\`).`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         responses: {
           '200': {
             description: 'Profile retrieved',
@@ -452,6 +523,9 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Non-editable:** \`email\`, \`did\`, \`role\` (use admin endpoint to change role).`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -459,8 +533,16 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
               schema: {
                 type: 'object',
                 properties: {
-                  name: { type: 'string', example: 'Alice J. Smith' },
-                  organizationName: { type: 'string', example: 'MIT' },
+                  name: {
+                    type: 'string',
+                    description: 'The updated full name of the user.',
+                    example: 'Alice J. Smith'
+                  },
+                  organizationName: {
+                    type: 'string',
+                    description: 'The updated organization name affiliation.',
+                    example: 'MIT'
+                  },
                 },
               },
             },
@@ -498,14 +580,16 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
             in: 'path',
             required: true,
             schema: { type: 'string', format: 'uuid' },
-            description: 'User ID (UUID) to upgrade',
+            description: 'The unique User ID (UUID) of the account to upgrade.',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
           },
           {
             name: 'X-Admin-Secret',
             in: 'header',
             required: true,
             schema: { type: 'string' },
-            description: 'Server admin secret for administrative operations',
+            description: 'The admin secret defined in the server environment (timing-safe verification).',
+            example: 'super-secret-admin-key'
           },
         ],
         requestBody: {
@@ -516,7 +600,12 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['role'],
                 properties: {
-                  role: { type: 'string', enum: ['issuer', 'verifier', 'attester'], example: 'issuer' },
+                  role: {
+                    type: 'string',
+                    enum: ['issuer', 'verifier', 'attester'],
+                    description: 'The new system role to assign to the user.',
+                    example: 'issuer'
+                  },
                 },
               },
             },
@@ -562,6 +651,9 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 
 **Authentication:** Requires a valid Bearer JWT.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -570,9 +662,22 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['name', 'role'],
                 properties: {
-                  name: { type: 'string', example: 'Test University' },
-                  role: { type: 'string', enum: ['issuer', 'verifier', 'attester', 'subject'], example: 'issuer' },
-                  slug: { type: 'string', description: 'Custom slug (optional, auto-generated if omitted)', example: 'test-university' },
+                  name: {
+                    type: 'string',
+                    description: 'The unique display name for the organization.',
+                    example: 'Test University'
+                  },
+                  role: {
+                    type: 'string',
+                    enum: ['issuer', 'verifier', 'attester', 'subject'],
+                    description: 'The system role the organization\'s generated DID will operate under.',
+                    example: 'issuer'
+                  },
+                  slug: {
+                    type: 'string',
+                    description: 'Custom URL-friendly identifier. Auto-generated from the name if omitted.',
+                    example: 'test-university'
+                  },
                 },
               },
             },
@@ -587,9 +692,9 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                   allOf: [
                     { $ref: '#/components/schemas/OrgRecord' },
                     {
-                      type: 'object',
-                      required: ['memberRole'],
-                      properties: { memberRole: { type: 'string', enum: ['owner'], example: 'owner' } },
+                       type: 'object',
+                       required: ['memberRole'],
+                       properties: { memberRole: { type: 'string', enum: ['owner'], example: 'owner' } },
                     },
                   ],
                 },
@@ -618,7 +723,15 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
         description: `Returns the organization record. Caller must be a member of the organization (any role).`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID).',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         responses: {
           '200': {
@@ -647,7 +760,15 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 **Authorization:** Caller must be an **owner** of the organization.`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID) to delete.',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         responses: {
           '200': {
@@ -686,7 +807,15 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 **Authorization:** Caller must be a member of the organization (any role).`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID).',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         responses: {
           '200': {
@@ -733,8 +862,23 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 - Cannot demote the last owner (returns \`409 CANNOT_REMOVE_LAST_OWNER\`)`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Target member user ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID).',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
+          {
+            name: 'userId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The target member\'s User ID (UUID).',
+            example: 'c2c3d4e5-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         requestBody: {
           required: true,
@@ -744,7 +888,12 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['role'],
                 properties: {
-                  role: { type: 'string', enum: ['member', 'admin', 'owner'], example: 'admin' },
+                  role: {
+                    type: 'string',
+                    enum: ['member', 'admin', 'owner'],
+                    description: 'The new organization membership role to assign to the user.',
+                    example: 'admin'
+                  },
                 },
               },
             },
@@ -793,8 +942,23 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 **Last owner protection:** Cannot remove the last owner — returns \`409 CANNOT_REMOVE_LAST_OWNER\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Target member user ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID).',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
+          {
+            name: 'userId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The target member\'s User ID (UUID) to remove.',
+            example: 'c2c3d4e5-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         responses: {
           '200': {
@@ -839,7 +1003,15 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 **Duplicate guard:** Inviting a user who is already a member returns \`409 ALREADY_MEMBER\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'The unique organization ID (UUID).',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+          },
         ],
         requestBody: {
           required: true,
@@ -849,8 +1021,18 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
                 type: 'object',
                 required: ['email', 'role'],
                 properties: {
-                  email: { type: 'string', format: 'email', example: 'newmember@example.com' },
-                  role: { type: 'string', enum: ['member', 'admin'], example: 'member' },
+                  email: {
+                    type: 'string',
+                    format: 'email',
+                    description: 'The email address of the user to invite.',
+                    example: 'newmember@example.com'
+                  },
+                  role: {
+                    type: 'string',
+                    enum: ['member', 'admin'],
+                    description: 'The organization role to assign to the user upon joining.',
+                    example: 'member'
+                  },
                 },
               },
             },
@@ -907,13 +1089,24 @@ Credentials are tracked via a **Token Status List** (draft-ietf-oauth-status-lis
 **Authentication:** Caller must be authenticated (Bearer JWT).`,
         security: [{ BearerAuth: [] }],
         parameters: [
-          { name: 'token', in: 'path', required: true, schema: { type: 'string', minLength: 64, maxLength: 64 }, description: '64-character hex invite token' },
+          { $ref: '#/components/parameters/AuthorizationHeader' },
+          {
+            name: 'token',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', minLength: 64, maxLength: 64 },
+            description: 'The 64-character hexadecimal invite token.',
+            example: '3fa85f6457174562b3fc2c963f66afa63fa85f6457174562b3fc2c963f66afa6'
+          },
         ],
         requestBody: {
           required: false,
           content: {
             'application/json': {
-              schema: { type: 'object' },
+              schema: {
+                type: 'object',
+                description: 'Optional empty request body.'
+              },
             },
           },
         },
@@ -981,7 +1174,7 @@ Submit your \`did:key\` identifier to receive a one-time challenge nonce. This i
                 properties: {
                   did: {
                     type: 'string',
-                    description: 'The did:key (P-256) identifier of the authenticating actor.',
+                    description: 'The did:key (P-256) identifier of the authenticating actor requesting the challenge.',
                     example: 'did:key:zDnaeWJjH...',
                   },
                 },
@@ -1057,16 +1250,18 @@ const signature = Buffer.from(sigDer).toString('base64')
                 properties: {
                   did: {
                     type: 'string',
+                    description: 'The did:key identifier of the authenticating actor.',
                     example: 'did:key:zDnaeWJjH...',
                   },
                   challengeId: {
                     type: 'string',
                     format: 'uuid',
+                    description: 'The unique challenge UUID received from the /v1/auth/challenge endpoint.',
                     example: 'a58b9c8f-ddec-44a5-a3b5-732346dac1dd',
                   },
                   signature: {
                     type: 'string',
-                    description: 'base64-encoded DER-encoded ECDSA (P-256/SHA-256) signature of UTF-8(did + ":" + nonce)',
+                    description: 'base64-encoded DER-encoded ECDSA (P-256/SHA-256) signature of the UTF-8 bytes of `did:nonce`.',
                     example: 'MEYCIQDx...',
                   },
                 },
@@ -1136,6 +1331,7 @@ The \`privateKey\` field is a **P-256 JWK object** returned **only once**, at cr
                   role: {
                     type: 'string',
                     enum: ['subject', 'issuer', 'verifier', 'attester'],
+                    description: 'The system role/capability to assign to the new DID.',
                     example: 'subject',
                   },
                 },
@@ -1193,6 +1389,9 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT from \`POST /v1/auth/verify\` or \`POST /v1/auth/login\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         responses: {
           '200': {
             description: 'Successful retrieval',
@@ -1236,8 +1435,8 @@ Use this endpoint to:
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The target did:key identifier.',
-            example: 'did:key:zDnaeWJjH...',
+            description: 'The target did:key identifier to resolve.',
+            example: 'did:key:zDnaeWJjH...'
           },
         ],
         responses: {
@@ -1277,12 +1476,14 @@ Use this endpoint to:
 **Authentication:** Requires a valid \`Bearer\` JWT from \`POST /v1/auth/verify\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'did',
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The DID to deactivate.',
+            description: 'The did:key identifier to deactivate. Must match the authenticated user\'s own DID.',
+            example: 'did:key:zDnaeWJjH...'
           },
         ],
         responses: {
@@ -1325,6 +1526,9 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         responses: {
           '200': {
             description: 'Credentials list retrieved',
@@ -1376,6 +1580,9 @@ Use this endpoint to:
 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -1386,24 +1593,25 @@ Use this endpoint to:
                 properties: {
                   subjectDid: {
                     type: 'string',
-                    description: 'The recipient subject DID.',
+                    description: 'The recipient subject DID (did:key) that this credential will be issued to.',
                     example: 'did:key:zDnaeWJjH...',
                   },
                   credentialType: {
                     type: 'array',
                     items: { type: 'string' },
                     minItems: 1,
+                    description: 'Array of credential type strings identifying the schema type.',
                     example: ['UniversityDegreeCredential'],
                   },
                   claims: {
                     type: 'object',
-                    description: 'Subject attributes to sign as selective disclosures.',
+                    description: 'Subject attributes/claims to sign as selective disclosures.',
                     example: { name: 'Alice Smith', degree: 'Bachelor of Science', gpa: '3.9' },
                   },
                   expiresAt: {
                     type: 'string',
                     format: 'date-time',
-                    description: 'ISO-8601 expiration timestamp.',
+                    description: 'Optional ISO-8601 expiration timestamp (e.g. YYYY-MM-DDTHH:mm:ssZ).',
                     example: '2030-12-31T23:59:59Z',
                   },
                 },
@@ -1461,6 +1669,7 @@ Use this endpoint to:
 **Authentication:** Requires a valid \`Bearer\` JWT (issuer or subject role).`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'id',
             in: 'path',
@@ -1505,12 +1714,14 @@ Use this endpoint to:
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`issuer\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'id',
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The credential ID.',
+            description: 'The credential ID (URN/UUID) to revoke.',
+            example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee',
           },
         ],
         responses: {
@@ -1565,7 +1776,8 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The credential ID.',
+            description: 'The credential ID (URN/UUID) to check status for.',
+            example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee'
           },
         ],
         responses: {
@@ -1605,6 +1817,9 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
 
 **Access control:** Requires role \`subject\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -1613,11 +1828,16 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
                 type: 'object',
                 required: ['credentialId', 'revealedClaims'],
                 properties: {
-                  credentialId: { type: 'string', example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee' },
+                  credentialId: {
+                    type: 'string',
+                    description: 'The unique ID (URN UUID) of the credential to derive the presentation from.',
+                    example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee'
+                  },
                   revealedClaims: {
                     type: 'array',
                     items: { type: 'string' },
                     minItems: 1,
+                    description: 'Array of claim names (keys) that the subject chooses to selectively disclose to the verifier.',
                     example: ['name', 'degree'],
                   },
                 },
@@ -1667,6 +1887,17 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
 3. **Trust chain check** — confirms the credential's issuer has an active attestation in the trust registry
 4. **Revocation check** — confirms the underlying credential has not been revoked or expired (via Token Status List)
 
+**Request Body Format:**
+Requires either an inline \`presentation\` object containing \`sdJwt\` or a \`presentationId\` referencing a stored presentation.
+- Inline presentation format:
+  \`\`\`json
+  {
+    "presentation": {
+      "sdJwt": "issuerJwt~disclosure1~disclosure2~...~"
+    }
+  }
+  \`\`\`
+
 **Response fields explained:**
 
 | Field | Description |
@@ -1680,17 +1911,32 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
 
 **Access control:** Requires role \`verifier\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['presentation'],
                 properties: {
                   presentation: {
                     type: 'object',
-                    description: 'The full Verifiable Presentation object (stored by ID or inline).',
+                    description: 'The Verifiable Presentation object containing the SD-JWT.',
+                    required: ['sdJwt'],
+                    properties: {
+                      sdJwt: {
+                        type: 'string',
+                        description: 'The compact serialization of the derived SD-JWT presentation (issuerJwt~disclosure1~disclosure2~...~).',
+                        example: 'eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCJ9.ey...~WyIyS3B5WD...',
+                      },
+                    },
+                  },
+                  presentationId: {
+                    type: 'string',
+                    description: 'Alternatively, the ID of a stored presentation to verify.',
+                    example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee',
                   },
                 },
               },
@@ -1745,12 +1991,14 @@ Returns the current lifecycle status of a Verifiable Credential. Intended to be 
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`subject\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'id',
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The presentation ID.',
+            description: 'The unique presentation ID (URN UUID) to retrieve.',
+            example: 'urn:uuid:7179010f-6240-424a-ba92-a16912384aee'
           },
         ],
         responses: {
@@ -1820,7 +2068,8 @@ Performs a point-in-time trust lookup for a specific issuer DID. Returns \`{"tru
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The issuer DID to check.',
+            description: 'The issuer did:key identifier to check.',
+            example: 'did:key:zDnaeWJjH...'
           },
         ],
         responses: {
@@ -1855,6 +2104,9 @@ This API uses a **delegated trust** model. Attesters act as trust anchors (simil
 
 **Access control:** Requires role \`attester\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -1863,8 +2115,17 @@ This API uses a **delegated trust** model. Attesters act as trust anchors (simil
                 type: 'object',
                 required: ['issuerDid'],
                 properties: {
-                  issuerDid: { type: 'string', example: 'did:key:zDnaeWJjH...' },
-                  expiresAt: { type: 'string', format: 'date-time', description: 'Optional expiration timestamp.', example: '2030-12-31T23:59:59Z' },
+                  issuerDid: {
+                    type: 'string',
+                    description: 'The did:key identifier of the issuer to attest.',
+                    example: 'did:key:zDnaeWJjH...'
+                  },
+                  expiresAt: {
+                    type: 'string',
+                    format: 'date-time',
+                    description: 'Optional ISO-8601 expiration timestamp (e.g. YYYY-MM-DDTHH:mm:ssZ).',
+                    example: '2030-12-31T23:59:59Z'
+                  },
                 },
               },
             },
@@ -1907,12 +2168,14 @@ This API uses a **delegated trust** model. Attesters act as trust anchors (simil
 **Authentication:** Requires a valid \`Bearer\` JWT with role \`attester\`.`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'id',
             in: 'path',
             required: true,
             schema: { type: 'string' },
-            description: 'The attestation ID.',
+            description: 'The unique ID (UUID) of the attestation record to revoke.',
+            example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
           },
         ],
         responses: {
@@ -2046,17 +2309,44 @@ Implements RFC 9126 Pushed Authorization Request. The client pushes authorizatio
                 type: 'object',
                 required: ['response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method'],
                 properties: {
-                  response_type: { type: 'string', enum: ['code'], example: 'code' },
-                  client_id: { type: 'string', description: 'The client DID (did:key)', example: 'did:key:zDnaeWJjH...' },
-                  redirect_uri: { type: 'string', format: 'uri', example: 'https://wallet.example.com/callback' },
-                  code_challenge: { type: 'string', description: 'BASE64URL(SHA-256(code_verifier))', example: 'E9Melhoa2O...' },
-                  code_challenge_method: { type: 'string', enum: ['S256'], example: 'S256' },
+                  response_type: {
+                    type: 'string',
+                    enum: ['code'],
+                    description: 'The OAuth 2.0 response type. Must be set to `code`.',
+                    example: 'code'
+                  },
+                  client_id: {
+                    type: 'string',
+                    description: 'The client wallet identifier (must be a did:key).',
+                    example: 'did:key:zDnaeWJjH...'
+                  },
+                  redirect_uri: {
+                    type: 'string',
+                    format: 'uri',
+                    description: 'The redirect URI of the wallet callback handler.',
+                    example: 'https://wallet.example.com/callback'
+                  },
+                  code_challenge: {
+                    type: 'string',
+                    description: 'The PKCE code challenge derived from the code verifier: BASE64URL(SHA-256(code_verifier)).',
+                    example: 'E9Melhoa2O...'
+                  },
+                  code_challenge_method: {
+                    type: 'string',
+                    enum: ['S256'],
+                    description: 'The method used to derive the challenge. Must be set to `S256`.',
+                    example: 'S256'
+                  },
                   authorization_details: {
                     type: 'string',
-                    description: 'JSON-encoded array of credential request objects',
+                    description: 'JSON-encoded array of credential request metadata objects (HAIP/OID4VCI spec).',
                     example: '[{"type":"openid_credential","credential_configuration_id":"UniversityDegreeCredential"}]',
                   },
-                  scope: { type: 'string', example: 'openid' },
+                  scope: {
+                    type: 'string',
+                    description: 'Optional standard OAuth scopes to request.',
+                    example: 'openid'
+                  },
                 },
               },
             },
@@ -2107,7 +2397,7 @@ The client redirects the user/wallet to this endpoint using the \`request_uri\` 
             in: 'query',
             required: true,
             schema: { type: 'string' },
-            description: 'The request_uri returned by POST /oauth/par',
+            description: 'The unique request_uri returned by the POST /oauth/par endpoint.',
             example: 'urn:ietf:params:oauth:request_uri:abc123',
           },
           {
@@ -2115,7 +2405,7 @@ The client redirects the user/wallet to this endpoint using the \`request_uri\` 
             in: 'query',
             required: true,
             schema: { type: 'string' },
-            description: 'The client DID (must match the PAR request)',
+            description: 'The client wallet DID (must match the client_id submitted in the original PAR request).',
             example: 'did:key:zDnaeWJjH...',
           },
         ],
@@ -2162,24 +2452,40 @@ Exchange an authorization code for a **DPoP-bound access token** and a \`c_nonce
                 type: 'object',
                 required: ['grant_type', 'code', 'redirect_uri', 'client_id', 'code_verifier'],
                 properties: {
-                  grant_type: { type: 'string', enum: ['authorization_code'], example: 'authorization_code' },
-                  code: { type: 'string', description: 'Authorization code from the authorize redirect', example: 'AUTH_CODE' },
-                  redirect_uri: { type: 'string', format: 'uri', example: 'https://wallet.example.com/callback' },
-                  client_id: { type: 'string', description: 'The client DID', example: 'did:key:zDnaeWJjH...' },
-                  code_verifier: { type: 'string', description: 'PKCE code verifier (43-128 chars)', example: 'dBjftJeZ4C...' },
+                  grant_type: {
+                    type: 'string',
+                    enum: ['authorization_code'],
+                    description: 'The authorization grant type. Must be set to `authorization_code`.',
+                    example: 'authorization_code'
+                  },
+                  code: {
+                    type: 'string',
+                    description: 'The authorization code received from the /oauth/authorize redirect.',
+                    example: 'AUTH_CODE'
+                  },
+                  redirect_uri: {
+                    type: 'string',
+                    format: 'uri',
+                    description: 'The redirect URI of the wallet callback handler.',
+                    example: 'https://wallet.example.com/callback'
+                  },
+                  client_id: {
+                    type: 'string',
+                    description: 'The client wallet DID (must match the client_id in the original PAR request).',
+                    example: 'did:key:zDnaeWJjH...'
+                  },
+                  code_verifier: {
+                    type: 'string',
+                    description: 'The PKCE code verifier string matching the code challenge: [A-Za-z0-9-_~.]{43,128}.',
+                    example: 'dBjftJeZ4C...'
+                  },
                 },
               },
             },
           },
         },
         parameters: [
-          {
-            name: 'DPoP',
-            in: 'header',
-            required: true,
-            schema: { type: 'string' },
-            description: 'DPoP proof JWT (RFC 9449)',
-          },
+          { $ref: '#/components/parameters/DPoPHeader' }
         ],
         responses: {
           '200': {
@@ -2220,13 +2526,8 @@ Exchange an authorization code for a **DPoP-bound access token** and a \`c_nonce
 **Authentication:** Requires the DPoP-bound access token (\`Authorization: DPoP <token>\`) and a fresh \`DPoP\` proof header.`,
         security: [{ DPoP: [] }],
         parameters: [
-          {
-            name: 'DPoP',
-            in: 'header',
-            required: true,
-            schema: { type: 'string' },
-            description: 'DPoP proof JWT for this request',
-          },
+          { $ref: '#/components/parameters/DPoPHeader' },
+          { $ref: '#/components/parameters/DPoPAuthorizationHeader' }
         ],
         responses: {
           '200': {
@@ -2281,13 +2582,8 @@ The proof JWT must have:
 **Authentication:** Requires DPoP-bound access token (\`Authorization: DPoP <token>\`) + \`DPoP\` proof header.`,
         security: [{ DPoP: [] }],
         parameters: [
-          {
-            name: 'DPoP',
-            in: 'header',
-            required: true,
-            schema: { type: 'string' },
-            description: 'DPoP proof JWT for this request',
-          },
+          { $ref: '#/components/parameters/DPoPHeader' },
+          { $ref: '#/components/parameters/DPoPAuthorizationHeader' }
         ],
         requestBody: {
           required: true,
@@ -2300,20 +2596,30 @@ The proof JWT must have:
                   format: {
                     type: 'string',
                     enum: ['vc+sd-jwt', 'mso_mdoc'],
-                    description: 'Requested credential format',
+                    description: 'Requested credential format. Either `vc+sd-jwt` (W3C SD-JWT VC) or `mso_mdoc` (ISO 18013-5 mdoc).',
                     example: 'vc+sd-jwt',
                   },
                   credential_configuration_id: {
                     type: 'string',
-                    description: 'Credential configuration ID from issuer metadata',
+                    description: 'Credential configuration identifier mapping to the supported schema type from the metadata.',
                     example: 'UniversityDegreeCredential',
                   },
                   proof: {
                     type: 'object',
                     required: ['proof_type', 'jwt'],
+                    description: 'Holder proof of possession binding the key.',
                     properties: {
-                      proof_type: { type: 'string', enum: ['jwt'], example: 'jwt' },
-                      jwt: { type: 'string', description: 'Key proof JWT (openid4vci-proof+jwt)', example: 'eyJhbGci...' },
+                      proof_type: {
+                        type: 'string',
+                        enum: ['jwt'],
+                        description: 'The type of proof of possession. Must be set to `jwt`.',
+                        example: 'jwt'
+                      },
+                      jwt: {
+                        type: 'string',
+                        description: 'Compact signed JWT verification proof string (typ = `openid4vci-proof+jwt`).',
+                        example: 'eyJhbGci...'
+                      },
                     },
                   },
                 },
@@ -2367,6 +2673,9 @@ A verifier calls this endpoint to start a Verifiable Presentation request sessio
 
 **Authentication:** Requires a valid Bearer JWT with role \`verifier\`.`,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' }
+        ],
         requestBody: {
           required: true,
           content: {
@@ -2377,7 +2686,68 @@ A verifier calls this endpoint to start a Verifiable Presentation request sessio
                 properties: {
                   dcqlQuery: {
                     type: 'object',
-                    description: 'DCQL query specifying requested credential(s) and claims',
+                    description: 'Digital Credential Query Language (DCQL) object defining the query criteria.',
+                    required: ['credentials'],
+                    properties: {
+                      credentials: {
+                        type: 'array',
+                        description: 'List of credential query definitions.',
+                        items: {
+                          type: 'object',
+                          required: ['id', 'format'],
+                          properties: {
+                            id: {
+                              type: 'string',
+                              description: 'Unique identifier for the credential query target within this request.',
+                              example: 'university_degree'
+                            },
+                            format: {
+                              type: 'string',
+                              description: 'The expected credential format. Typically `dc+sd-jwt` (SD-JWT VC) or `mso_mdoc`.',
+                              example: 'dc+sd-jwt'
+                            },
+                            meta: {
+                              type: 'object',
+                              description: 'Optional metadata constraints such as vct (Verifiable Credential Type) or doctype.',
+                              properties: {
+                                vct_values: {
+                                  type: 'array',
+                                  description: 'Allowed Verifiable Credential Type (vct) values for SD-JWT VCs.',
+                                  items: { type: 'string' },
+                                  example: ['UniversityDegreeCredential']
+                                },
+                                doctype: {
+                                  type: 'string',
+                                  description: 'Document type constraint for mso_mdoc formats.',
+                                  example: 'org.iso.18013.5.1.mDL'
+                                }
+                              }
+                            },
+                            claims: {
+                              type: 'array',
+                              description: 'Array of specific claims requested from the credential.',
+                              items: {
+                                type: 'object',
+                                required: ['path'],
+                                properties: {
+                                  path: {
+                                    type: 'array',
+                                    description: 'JSON path array locating the claim inside the credential.',
+                                    items: { type: 'string' },
+                                    example: ['name']
+                                  },
+                                  id: {
+                                    type: 'string',
+                                    description: 'Optional ID for this claim.',
+                                    example: 'claim_name'
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
                     example: {
                       credentials: [{
                         id: 'university_degree',
@@ -2390,7 +2760,7 @@ A verifier calls this endpoint to start a Verifiable Presentation request sessio
                   redirectUri: {
                     type: 'string',
                     format: 'uri',
-                    description: 'Optional redirect URI for browser-based flows',
+                    description: 'Optional callback URL where the wallet will redirect the browser/user upon completing the presentation verification.',
                     example: 'https://verifier.example.com/result',
                   },
                 },
@@ -2448,7 +2818,8 @@ The wallet fetches the signed **JWT Authorization Request (JAR)** object for a V
             in: 'path',
             required: true,
             schema: { type: 'string', format: 'uuid' },
-            description: 'VP session ID',
+            description: 'The unique session ID of the VP presentation request, which was returned by the POST /oauth/vp/initiate endpoint. Used to retrieve the signed JWT Authorization Request (JAR) object.',
+            example: 'b2c3d4e5-f6g7-8h9i-0j1k-l2m3n4o5p6q7',
           },
         ],
         responses: {
@@ -2502,13 +2873,13 @@ The wallet posts the Verifiable Presentation response to this endpoint. The VP t
                 properties: {
                   vp_token: {
                     type: 'string',
-                    description: 'SD-JWT VC with KB-JWT: issuerJwt~disc1~...~kbJwt',
-                    example: 'eyJ...~disc1~eyJraWQ...',
+                    description: 'The Verifiable Presentation token submitted by the wallet. For HAIP 1.0, this must be a compact serialized SD-JWT containing the issuer\'s signature, disclosures, and a Key Binding JWT (KB-JWT) appended at the end, separated by tildes (~). Format: `issuerJwt~disclosure1~disclosure2~...~kbJwt`.',
+                    example: 'eyJhbGciOiJFUzI1NiIsInR5cCI6InZjK3NkLWp3dCJ9.eyJpc3MiOiJkaWQ6a2V5Om15LWlzc3VlciIs...~WyJzYWx0MTIzIiwgIm5hbWUiLCAiQWxpY2UiXQ~eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9.eyJub25jZSI6InNIdGgyUCIsImF1ZCI6ImRpZDJrZXk...~',
                   },
                   presentation_submission: {
                     type: 'string',
-                    description: 'JSON-encoded Presentation Submission object mapping DCQL query to credential',
-                    example: '{"id":"submission-1","definition_id":"...","descriptor_map":[...]}',
+                    description: 'A JSON-serialized string representing the Presentation Submission object, which links the credentials and claims in the `vp_token` back to the original DCQL query requirements (as defined in the JAR request object).',
+                    example: '{"id":"submission-1","definition_id":"vp-session-definition","descriptor_map":[{"id":"university_degree","format":"vc+sd-jwt","path":"$.vp_token"}]}',
                   },
                 },
               },
@@ -2565,12 +2936,14 @@ The verifier polls this endpoint after initiating a VP session to check whether 
 **Authentication:** Requires the same Bearer JWT that initiated the session (verifier role).`,
         security: [{ BearerAuth: [] }],
         parameters: [
+          { $ref: '#/components/parameters/AuthorizationHeader' },
           {
             name: 'id',
             in: 'path',
             required: true,
             schema: { type: 'string', format: 'uuid' },
-            description: 'VP session ID returned by POST /oauth/vp/initiate',
+            description: 'The unique VP session ID returned when initiating the presentation request via POST /oauth/vp/initiate.',
+            example: 'b2c3d4e5-f6g7-8h9i-0j1k-l2m3n4o5p6q7',
           },
         ],
         responses: {
