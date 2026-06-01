@@ -8,4 +8,3 @@ tests
 README.md
 docker-compose.yml
 Dockerfile
-bun.lock
