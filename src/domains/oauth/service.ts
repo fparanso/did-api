@@ -182,15 +182,24 @@ export async function handleVpInitiate(params: {
   return { sessionId, requestUri, nonce }
 }
 
-export async function buildSignedRequestObject(sessionId: string, issuerPrivateJwk: JWK, issuerDid: string): Promise<string> {
+export async function buildSignedRequestObject(sessionId: string): Promise<string> {
   const session = await findVpSession(sessionId)
   if (!session) throw new AppError('NOT_FOUND', 'VP session not found', 404)
+
+  const verifierDid = session.verifierDid
+  if (!verifierDid) {
+    throw new AppError('INVALID_STATE', 'Verifier DID not associated with session', 400)
+  }
+
+  const issuerRecord = await getDidRecord(verifierDid)
+  const issuerPrivateJwk: JWK = JSON.parse(await decryptKey(issuerRecord.privateKey))
+
   const host = getHost()
   return new SignJWT({
     response_type: 'vp_token',
     response_mode: 'direct_post',
     response_uri: `${host}/oauth/direct_post`,
-    client_id: issuerDid,
+    client_id: verifierDid,
     nonce: session.nonce,
     dcql_query: session.dcqlQuery,
   })

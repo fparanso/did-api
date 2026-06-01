@@ -99,6 +99,15 @@ describe('OID4VP — VP session + direct_post', () => {
     expect(nonce).toBeDefined()
   })
 
+  test('GET /oauth/request/:id fetches signed JAR request object anonymously', async () => {
+    const res = await app.fetch(new Request(`http://localhost/oauth/request/${sessionId}`))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('application/oauth-authz-req+jwt')
+    const jwt = await res.text()
+    expect(jwt).toBeTruthy()
+    expect(jwt.split('.').length).toBe(3)
+  })
+
   test('POST /oauth/direct_post with valid SD-JWT+KB-JWT returns 200', async () => {
     const audience = 'http://localhost/oauth/direct_post'
     const combined = await discloseSelectiveClaims({

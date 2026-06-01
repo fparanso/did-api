@@ -124,12 +124,9 @@ oauthRouter.post('/vp/initiate', jwtMiddleware, async c => {
 })
 
 // VP — signed request object (wallet fetches)
-oauthRouter.get('/request/:id', jwtMiddleware, async c => {
+oauthRouter.get('/request/:id', async c => {
   const sessionId = c.req.param('id')
-  const issuerDid = c.get('did')
-  const issuerRecord = await getDidRecord(issuerDid)
-  const issuerPrivateJwk: JWK = JSON.parse(await decryptKey(issuerRecord.privateKey))
-  const jwt = await buildSignedRequestObject(sessionId, issuerPrivateJwk, issuerDid)
+  const jwt = await buildSignedRequestObject(sessionId)
   return new Response(jwt, { headers: { 'Content-Type': 'application/oauth-authz-req+jwt' } })
 })
 
